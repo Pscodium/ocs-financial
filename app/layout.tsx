@@ -12,6 +12,9 @@ const _jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbra
 export const metadata: Metadata = {
   title: 'Gestor Financeiro',
   description: 'Gerencie suas contas mensais de forma simples e organizada',
+  icons: {
+    icon: '/favicon.ico', // ou '/icon.png'
+  },
 }
 
 export const viewport: Viewport = {
