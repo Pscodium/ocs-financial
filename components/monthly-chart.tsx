@@ -42,7 +42,9 @@ const chartConfig = {
 
 export function MonthlyChart({ allMonths }: MonthlyChartProps) {
   const chartData = useMemo(() => {
-    const sorted = [...allMonths].sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+    const sorted = [...allMonths]
+      .filter((m) => m && m.monthKey)
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
 
     return sorted.map((month) => {
       const billCategories = month.categories.filter((c) => c.type === "bills" || !c.type)

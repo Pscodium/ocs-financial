@@ -30,7 +30,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Copy, Wallet, LogOut, Wifi, WifiOff, RefreshCw } from "lucide-react"
+import { Plus, Copy, Wallet, LogOut, Wifi, WifiOff, RefreshCw, CloudUpload } from "lucide-react"
 import { toast } from "sonner"
 import { getMonthLabel } from "@/lib/types"
 import {
@@ -85,6 +85,24 @@ export default function HomePage() {
     finance.duplicateMonthTo(nextMonth)
     setShowDuplicateConfirm(false)
     toast.success(`Contas copiadas para ${getMonthLabel(nextMonth)}`)
+  }
+
+  const handleSyncOfflineChanges = async () => {
+    try {
+      await finance.syncOfflineChanges()
+      toast.success("Sincronização concluída! Suas mudanças foram enviadas ao servidor.")
+    } catch (error) {
+      toast.error("Erro ao sincronizar. Tente novamente.")
+    }
+  }
+
+  const handleDiscardOfflineChanges = async () => {
+    try {
+      await finance.discardOfflineChanges()
+      toast.success("Dados sincronizados com o servidor. Mudanças offline descartadas.")
+    } catch (error) {
+      toast.error("Erro ao sincronizar. Tente novamente.")
+    }
   }
 
   if (!finance.loaded) {
@@ -150,6 +168,62 @@ export default function HomePage() {
         </header>
 
       <main className="mx-auto max-w-5xl px-4 py-6">
+        {/* Offline Changes Alert */}
+        {finance.hasPendingChanges && finance.isApiOnline && (
+          <div className="mb-6 rounded-lg border border-orange-200 bg-orange-50 px-4 py-4 dark:border-orange-900 dark:bg-orange-950">
+            <div className="flex items-start gap-3">
+              <CloudUpload className="h-5 w-5 flex-shrink-0 text-orange-600 dark:text-orange-400 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
+                  Você tem mudanças feitas offline
+                </p>
+                <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">
+                  Escolha como sincronizar seus dados:
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    onClick={handleSyncOfflineChanges}
+                    disabled={finance.isSyncing}
+                    size="sm"
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    {finance.isSyncing ? (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <CloudUpload className="mr-1.5 h-3.5 w-3.5" />
+                        Enviar Mudanças ao Servidor
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleDiscardOfflineChanges}
+                    disabled={finance.isSyncing}
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-900"
+                  >
+                    {finance.isSyncing ? (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                        Usar Dados do Servidor
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Summary */}
         <SummaryCards total={total} paid={paid} income={income} myShare={myShare} sobra={sobra} />
 

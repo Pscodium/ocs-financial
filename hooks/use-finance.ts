@@ -7,6 +7,7 @@ import { api, ApiError, NetworkError } from "@/lib/api"
 
 const STORAGE_KEY = "gestor-financeiro-data"
 const API_STATUS_KEY = "api-status"
+const PENDING_CHANGES_KEY = "pending-offline-changes"
 
 // Check if API is online
 async function checkApiStatus(): Promise<boolean> {
@@ -36,6 +37,20 @@ function saveAllMonths(months: MonthData[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(months))
 }
 
+function hasPendingOfflineChanges(): boolean {
+  if (typeof window === "undefined") return false
+  return localStorage.getItem(PENDING_CHANGES_KEY) === "true"
+}
+
+function setPendingOfflineChanges(pending: boolean) {
+  if (typeof window === "undefined") return
+  if (pending) {
+    localStorage.setItem(PENDING_CHANGES_KEY, "true")
+  } else {
+    localStorage.removeItem(PENDING_CHANGES_KEY)
+  }
+}
+
 // Sync with API
 async function syncWithApi(months: MonthData[]): Promise<MonthData[]> {
   try {
@@ -61,29 +76,30 @@ async function syncWithApi(months: MonthData[]): Promise<MonthData[]> {
 }
 
 // Save to both API and localStorage
-async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>): Promise<void> {
+async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, modifiedMonthKey?: string): Promise<void> {
   try {
     const isOnline = await checkApiStatus()
     
-    if (isOnline) {
-      // Save each month to API
-      for (const month of months) {
-        const hasServerMonth = serverMonthKeys?.has(month.monthKey)
+    if (isOnline && modifiedMonthKey) {
+      // Save only the modified month to API
+      const modifiedMonth = months.find((m) => m.monthKey === modifiedMonthKey)
+      if (modifiedMonth) {
+        const hasServerMonth = serverMonthKeys?.has(modifiedMonth.monthKey)
 
         try {
           if (hasServerMonth) {
-            await api.updateMonth(month.monthKey, month)
+            await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
           } else {
-            await api.createMonth(month)
-            serverMonthKeys?.add(month.monthKey)
+            await api.createMonth(modifiedMonth)
+            serverMonthKeys?.add(modifiedMonth.monthKey)
           }
         } catch (error) {
           if (error instanceof ApiError && error.status === 404) {
-            await api.createMonth(month)
-            serverMonthKeys?.add(month.monthKey)
+            await api.createMonth(modifiedMonth)
+            serverMonthKeys?.add(modifiedMonth.monthKey)
           } else if (error instanceof ApiError && error.status === 409) {
-            await api.updateMonth(month.monthKey, month)
-            serverMonthKeys?.add(month.monthKey)
+            await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
+            serverMonthKeys?.add(modifiedMonth.monthKey)
           } else {
             throw error
           }
@@ -109,47 +125,93 @@ export function useFinance() {
   const [loaded, setLoaded] = useState(false)
   const [isApiOnline, setIsApiOnline] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [hasPendingChanges, setHasPendingChanges] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestSaveRef = useRef<MonthData[] | null>(null)
+  const modifiedMonthKeyRef = useRef<string | null>(null)
   const serverMonthKeysRef = useRef<Set<string>>(new Set())
 
-  const scheduleSave = useCallback((months: MonthData[]) => {
+  const scheduleSave = useCallback((months: MonthData[], modifiedMonthKey?: string) => {
     latestSaveRef.current = months
+    modifiedMonthKeyRef.current = modifiedMonthKey || null
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
     }
     saveTimerRef.current = setTimeout(async () => {
       if (!latestSaveRef.current) return
-      await saveToApi(latestSaveRef.current, serverMonthKeysRef.current)
+      
+      const isOnline = await checkApiStatus()
+      if (!isOnline) {
+        // Offline - mark as having pending changes
+        setPendingOfflineChanges(true)
+        setHasPendingChanges(true)
+        saveAllMonths(latestSaveRef.current)
+      } else {
+        // Online - save normally and clear any pending changes flag
+        await saveToApi(latestSaveRef.current, serverMonthKeysRef.current, modifiedMonthKeyRef.current || undefined)
+        
+        // Clear pending changes since we're now saving online
+        setPendingOfflineChanges(false)
+        setHasPendingChanges(false)
+      }
     }, 500)
   }, [])
 
   useEffect(() => {
     async function loadData() {
-      const localData = loadAllMonths()
+      setIsSyncing(true)
       
-      if (localData.length === 0) {
-        const defaultData = getDefaultData()
-        setAllMonths([defaultData])
-        await saveToApi([defaultData], serverMonthKeysRef.current)
-      } else {
-        setAllMonths(localData)
+      // Check if there are pending offline changes FIRST
+      const pending = hasPendingOfflineChanges()
+      
+      try {
+        // Try to fetch from API first
+        const apiMonths = await api.getMonths()
+        setIsApiOnline(true)
         
-        // Try to sync with API in background
-        setIsSyncing(true)
-        try {
-          const syncedData = await syncWithApi(localData)
-          setAllMonths(syncedData)
-          setIsApiOnline(true)
-          serverMonthKeysRef.current = new Set(syncedData.map((m) => m.monthKey))
-        } catch {
-          setIsApiOnline(false)
-        } finally {
-          setIsSyncing(false)
+        // Filter out any invalid data
+        const validMonths = apiMonths.filter((m) => m && m.monthKey)
+        serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
+        
+        if (pending) {
+          // There are offline changes - DON'T overwrite localStorage
+          // Load from localStorage and show sync options
+          const localData = loadAllMonths()
+          const validLocalData = localData.filter((m) => m && m.monthKey)
+          setAllMonths(validLocalData)
+          setHasPendingChanges(true)
+        } else {
+          // No offline changes - safe to use server data
+          saveAllMonths(validMonths)
+          setAllMonths(validMonths)
+          setHasPendingChanges(false)
         }
+      } catch {
+        // API offline - use localStorage as fallback
+        setIsApiOnline(false)
+        const localData = loadAllMonths()
+        
+        if (localData.length === 0) {
+          // No data at all - create default
+          const defaultData = getDefaultData()
+          setAllMonths([defaultData])
+          saveAllMonths([defaultData])
+        } else {
+          // Filter out any invalid cached data
+          const validLocalData = localData.filter((m) => m && m.monthKey)
+          
+          // Use cached data from localStorage
+          setAllMonths(validLocalData)
+          serverMonthKeysRef.current = new Set(validLocalData.map((m) => m.monthKey))
+        }
+        
+        if (pending) {
+          setHasPendingChanges(true)
+        }
+      } finally {
+        setIsSyncing(false)
+        setLoaded(true)
       }
-      
-      setLoaded(true)
     }
 
     loadData()
@@ -165,11 +227,78 @@ export function useFinance() {
 
   const currentMonth = allMonths.find((m) => m.monthKey === currentMonthKey)
 
-  const persist = useCallback((updated: MonthData[]) => {
+  const persist = useCallback((updated: MonthData[], modifiedMonthKey?: string) => {
     setAllMonths(updated)
-    saveAllMonths(updated)
-    scheduleSave(updated)
+    scheduleSave(updated, modifiedMonthKey)
   }, [scheduleSave])
+
+  const syncOfflineChanges = useCallback(async () => {
+    if (!hasPendingChanges) return
+    
+    setIsSyncing(true)
+    try {
+      const localData = loadAllMonths()
+      
+      // Send all months to API (offline overwrites online)
+      for (const month of localData) {
+        const hasServerMonth = serverMonthKeysRef.current.has(month.monthKey)
+        
+        try {
+          if (hasServerMonth) {
+            await api.updateMonth(month.monthKey, month)
+          } else {
+            await api.createMonth(month)
+            serverMonthKeysRef.current.add(month.monthKey)
+          }
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 404) {
+            await api.createMonth(month)
+            serverMonthKeysRef.current.add(month.monthKey)
+          } else if (error instanceof ApiError && error.status === 409) {
+            await api.updateMonth(month.monthKey, month)
+          } else {
+            throw error
+          }
+        }
+      }
+      
+      // Clear pending changes flag
+      setPendingOfflineChanges(false)
+      setHasPendingChanges(false)
+      setIsApiOnline(true)
+    } catch (error) {
+      console.error("Failed to sync offline changes:", error)
+      throw error
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [hasPendingChanges])
+
+  const discardOfflineChanges = useCallback(async () => {
+    if (!hasPendingChanges) return
+    
+    setIsSyncing(true)
+    try {
+      // Fetch fresh data from server
+      const apiMonths = await api.getMonths()
+      const validMonths = apiMonths.filter((m) => m && m.monthKey)
+      
+      // Overwrite localStorage with server data
+      saveAllMonths(validMonths)
+      setAllMonths(validMonths)
+      serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
+      
+      // Clear pending changes flag
+      setPendingOfflineChanges(false)
+      setHasPendingChanges(false)
+      setIsApiOnline(true)
+    } catch (error) {
+      console.error("Failed to discard offline changes:", error)
+      throw error
+    } finally {
+      setIsSyncing(false)
+    }
+  }, [hasPendingChanges])
 
   const ensureMonth = useCallback(
     (monthKey: string): MonthData[] => {
@@ -192,7 +321,7 @@ export function useFinance() {
           categories: [...m.categories, { id: createId(), name, type, bills: [], splitBy }],
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [currentMonthKey, ensureMonth, persist],
   )
@@ -206,7 +335,7 @@ export function useFinance() {
           categories: m.categories.map((c) => (c.id === categoryId ? { ...c, name, splitBy } : c)),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
   )
@@ -220,7 +349,7 @@ export function useFinance() {
           categories: m.categories.filter((c) => c.id !== categoryId),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
   )
@@ -242,7 +371,7 @@ export function useFinance() {
           }),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [currentMonthKey, ensureMonth, persist],
   )
@@ -262,7 +391,7 @@ export function useFinance() {
           }),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
   )
@@ -282,7 +411,7 @@ export function useFinance() {
           }),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
   )
@@ -302,7 +431,7 @@ export function useFinance() {
           }),
         }
       })
-      persist(updated)
+      persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
   )
@@ -327,7 +456,7 @@ export function useFinance() {
         })),
       }
       const updated = [...allMonths, newMonth]
-      persist(updated)
+      persist(updated, targetMonthKey)
       setCurrentMonthKey(targetMonthKey)
     },
     [allMonths, currentMonth, persist],
@@ -389,6 +518,9 @@ export function useFinance() {
     currentMonth,
     isApiOnline,
     isSyncing,
+    hasPendingChanges,
+    syncOfflineChanges,
+    discardOfflineChanges,
     addCategory,
     updateCategory,
     removeCategory,
