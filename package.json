@@ -6,7 +6,7 @@
     "node": "20.x"
   },
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "next dev --turbo -p 14000",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

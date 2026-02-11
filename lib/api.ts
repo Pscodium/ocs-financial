@@ -147,7 +147,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(monthData),
     })
-    return response.json()
+
+    if (response.status === 204) {
+      return {} as MonthData
+    }
+
+    return await response.json()
   },
 
   async updateMonth(monthKey: string, monthData: MonthData): Promise<MonthData> {
@@ -155,7 +160,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(monthData),
     })
-    return response.json()
+    return await response.json()
   },
 
   // Health check
