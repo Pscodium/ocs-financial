@@ -1,8 +1,11 @@
 import { parse } from "cookie"
 import type { MonthData } from "./types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:10000"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || API_BASE_URL
+
+console.log('API_BASE_URL:', API_BASE_URL)
+console.log('API_AUTH_URL:', API_AUTH_URL)
 
 export interface User {
   id: string
