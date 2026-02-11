@@ -119,6 +119,33 @@ export default function HomePage() {
   const sobra = finance.getSobra()
   const myShare = finance.getMyShare()
 
+  // Get previous month data for comparison
+  const previousMonthKey = shiftMonth(finance.currentMonthKey, -1)
+  const previousMonth = finance.allMonths.find((m) => m.monthKey === previousMonthKey)
+  
+  const previousMonthData = previousMonth ? {
+    total: previousMonth.categories
+      .filter((c) => c.type === "bills" || !c.type)
+      .reduce((sum, c) => sum + c.bills.reduce((s, b) => s + b.amount, 0), 0),
+    paid: previousMonth.categories
+      .filter((c) => c.type === "bills" || !c.type)
+      .reduce((sum, c) => sum + c.bills.filter((b) => b.paid).reduce((s, b) => s + b.amount, 0), 0),
+    income: previousMonth.categories
+      .filter((c) => c.type === "income")
+      .reduce((sum, c) => sum + c.bills.reduce((s, b) => s + b.amount, 0), 0),
+    myShare: previousMonth.categories
+      .filter((c) => c.type === "bills" || !c.type)
+      .reduce((sum, c) => {
+        const catTotal = c.bills.reduce((s, b) => s + b.amount, 0)
+        return sum + (c.splitBy && c.splitBy > 1 ? catTotal / c.splitBy : catTotal)
+      }, 0),
+    sobra: 0, // Will be calculated below
+  } : undefined
+  
+  if (previousMonthData) {
+    previousMonthData.sobra = previousMonthData.income - previousMonthData.myShare
+  }
+
   const incomeCategories = finance.getIncomeCategories()
   const billCategories = finance.getBillCategories()
 
@@ -225,7 +252,14 @@ export default function HomePage() {
         )}
 
         {/* Summary */}
-        <SummaryCards total={total} paid={paid} income={income} myShare={myShare} sobra={sobra} />
+        <SummaryCards 
+          total={total} 
+          paid={paid} 
+          income={income} 
+          myShare={myShare} 
+          sobra={sobra}
+          previousMonthData={previousMonthData}
+        />
 
         {/* Actions bar */}
         <div className="mt-6 flex flex-wrap items-center gap-2">

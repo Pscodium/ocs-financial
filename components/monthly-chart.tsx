@@ -1,11 +1,13 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import type { MonthData } from "@/lib/types"
 import { getMonthLabel, formatCurrency } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Line, LineChart, XAxis, YAxis, CartesianGrid } from "recharts"
+import { Calendar } from "lucide-react"
 
 interface MonthlyChartProps {
   allMonths: MonthData[]
@@ -41,12 +43,24 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export function MonthlyChart({ allMonths }: MonthlyChartProps) {
-  const chartData = useMemo(() => {
+  const [selectedYear, setSelectedYear] = useState<string>("all")
+
+  const { chartData, availableYears } = useMemo(() => {
     const sorted = [...allMonths]
       .filter((m) => m && m.monthKey)
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
 
-    return sorted.map((month) => {
+    // Get all available years
+    const years = Array.from(new Set(sorted.map((m) => m.monthKey.split("-")[0])))
+      .sort()
+      .reverse() // Most recent first
+
+    // Filter by selected year
+    const filtered = selectedYear === "all" 
+      ? sorted 
+      : sorted.filter((m) => m.monthKey.startsWith(selectedYear))
+
+    const data = filtered.map((month, index) => {
       const billCategories = month.categories.filter((c) => c.type === "bills" || !c.type)
       const incomeCategories = month.categories.filter((c) => c.type === "income")
 
@@ -66,11 +80,19 @@ export function MonthlyChart({ allMonths }: MonthlyChartProps) {
 
       const label = getMonthLabel(month.monthKey)
       const shortLabel = label.split(" ")[0]?.substring(0, 3).toUpperCase() || month.monthKey
-
+      
+      // Show year indicator subtly
+      const [year, monthNum] = month.monthKey.split("-")
+      const previousMonth = index > 0 ? filtered[index - 1] : null
+      const previousYear = previousMonth?.monthKey.split("-")[0]
+      const showYear = !previousMonth || previousYear !== year || monthNum === "01"
+      
+      const displayLabel = showYear ? `${shortLabel}\n'${year.slice(2)}` : shortLabel
 
       return {
-        month: shortLabel,
+        month: displayLabel,
         fullLabel: label,
+        monthKey: month.monthKey,
         income,
         total,
         paid,
@@ -78,7 +100,9 @@ export function MonthlyChart({ allMonths }: MonthlyChartProps) {
         pending: total - paid,
       }
     })
-  }, [allMonths])
+
+    return { chartData: data, availableYears: years }
+  }, [allMonths, selectedYear])
 
   if (chartData.length === 0) {
     return null
@@ -87,13 +111,55 @@ export function MonthlyChart({ allMonths }: MonthlyChartProps) {
   return (
     <Card className="border-none shadow-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold text-foreground">Comparativo Mensal</CardTitle>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base font-semibold text-foreground">Comparativo Mensal</CardTitle>
+          
+          {availableYears.length > 1 && (
+            <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <Calendar className="mr-1.5 h-3.5 w-3.5 opacity-50" />
+                <SelectValue placeholder="Filtrar ano" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <span className="text-xs">Geral (todos)</span>
+                </SelectItem>
+                {availableYears.map((year) => (
+                  <SelectItem key={year} value={year}>
+                    <span className="text-xs">{year}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="aspect-auto h-[300px] w-full">
-          <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+            <XAxis 
+              dataKey="month" 
+              tickLine={false} 
+              axisLine={false} 
+              fontSize={11}
+              interval="preserveStartEnd"
+              tick={({ x, y, payload }) => {
+                const lines = payload.value.split('\n')
+                return (
+                  <g transform={`translate(${x},${y})`}>
+                    <text x={0} y={0} dy={12} textAnchor="middle" fill="currentColor" fontSize={11}>
+                      {lines[0]}
+                    </text>
+                    {lines[1] && (
+                      <text x={0} y={0} dy={24} textAnchor="middle" fill="currentColor" fontSize={9} opacity={0.5}>
+                        {lines[1]}
+                      </text>
+                    )}
+                  </g>
+                )
+              }}
+            />
             <YAxis
               tickLine={false}
               axisLine={false}
