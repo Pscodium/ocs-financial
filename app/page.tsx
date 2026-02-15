@@ -169,13 +169,13 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5 rounded-lg bg-primary/10 px-3 py-1.5 transition-colors hover:bg-primary/20">
                 <Wallet className="h-5 w-5 text-primary" />
-                <span className="font-semibold tracking-tight text-foreground hidden sm:inline-block">Gestor Financeiro</span>
+                <span className="font-semibold tracking-tight select-none text-foreground hidden sm:inline-block">Gestor Financeiro</span>
               </div>
               <div className="h-6 w-px bg-border hidden sm:block" />
               <MonthSelector currentMonthKey={finance.currentMonthKey} onChange={finance.setCurrentMonthKey} />
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 select-none">
               {/* API Status Indicator */}
               <div className="hidden items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs md:flex">
                 {finance.isSyncing ? (
@@ -218,7 +218,7 @@ export default function HomePage() {
 
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
           {/* Welcome & Action Bar Mobile */}
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="mb-8 flex select-none flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
               <p className="mt-1 text-muted-foreground">
@@ -299,7 +299,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
             {/* Left Column: Income (Takes 4/12 columns on large screens) */}
             <div className="lg:col-span-12 xl:col-span-5 space-y-6">
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center justify-between border-b pb-2 select-none">
                 <div className="flex items-center gap-2">
                   <ArrowUpCircle className="h-5 w-5 text-green-500" />
                   <h2 className="text-xl font-semibold tracking-tight">Entradas & Saldos</h2>
@@ -354,7 +354,7 @@ export default function HomePage() {
 
             {/* Right Column: Bills (Takes 8/12 columns on large screens) */}
             <div className="lg:col-span-12 xl:col-span-7 space-y-6">
-              <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center justify-between border-b pb-2 select-none">
                 <div className="flex items-center gap-2">
                    <ArrowDownCircle className="h-5 w-5 text-red-500" />
                    <h2 className="text-xl font-semibold tracking-tight">Despesas & Contas</h2>
@@ -430,7 +430,7 @@ export default function HomePage() {
 
           {/* Chart Section - Dashboard Style */}
           {finance.allMonths.length > 0 && (
-             <div className="mt-12 space-y-4">
+             <div className="mt-12 space-y-4 select-none">
                 <div className="flex items-center gap-2">
                    <LayoutDashboard className="h-5 w-5 text-muted-foreground" />
                    <h2 className="text-xl font-semibold tracking-tight">Evolução Financeira</h2>

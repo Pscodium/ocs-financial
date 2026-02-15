@@ -115,7 +115,7 @@ export default function BudgetsPage() {
         <AppTabs />
         
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between select-none">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">Orçamentos</h1>
               <p className="mt-1 text-muted-foreground">
@@ -248,7 +248,7 @@ export default function BudgetsPage() {
             </div>
           ) : (
             <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
+              <CardContent className="flex flex-col items-center justify-center py-12 select-none">
                 <div className="rounded-full bg-muted p-4 mb-4">
                   <Target className="h-8 w-8 text-muted-foreground" />
                 </div>

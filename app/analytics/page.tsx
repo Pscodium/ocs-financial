@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
         <AppTabs />
         
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-8">
+          <div className="mb-8 select-none">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Análises e Relatórios</h1>
             <p className="mt-1 text-muted-foreground">
               Insights sobre seus hábitos financeiros baseados em {analytics.totalMonths} meses de dados

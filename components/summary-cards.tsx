@@ -74,7 +74,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Saldo em Conta</p>
+                    <p className="text-xs text-muted-foreground select-none">Saldo em Conta</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <p className="truncate font-mono text-lg font-semibold text-primary">
@@ -114,7 +114,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Total do Mês</p>
+                    <p className="text-xs text-muted-foreground select-none">Total do Mês</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <p className="truncate font-mono text-lg font-semibold text-foreground">
@@ -162,7 +162,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Pago</p>
+                    <p className="text-xs text-muted-foreground select-none">Pago</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <p className="truncate font-mono text-lg font-semibold text-success">
@@ -202,7 +202,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Pendente</p>
+                    <p className="text-xs text-muted-foreground select-none">Pendente</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <p className="truncate font-mono text-lg font-semibold text-warning">
@@ -247,7 +247,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Sobra do Mês</p>
+                    <p className="text-xs text-muted-foreground select-none">Sobra do Mês</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <p
@@ -295,7 +295,7 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs text-muted-foreground">Progresso</p>
+                    <p className="text-xs text-muted-foreground select-none">Progresso</p>
                     <Info className="h-3 w-3 text-muted-foreground/50" />
                   </div>
                   <div className="flex items-center gap-2">

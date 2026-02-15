@@ -1,6 +1,7 @@
 "use client"
 
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
@@ -51,10 +52,7 @@ const tabs = [
 ]
 
 export function AppTabs() {
-  const router = useRouter()
   const pathname = usePathname()
-
-  const currentTab = tabs.find((tab) => tab.href === pathname) || tabs[0]
 
   return (
     <div className="border-b bg-background">
@@ -65,11 +63,11 @@ export function AppTabs() {
             const isActive = pathname === tab.href
             
             return (
-              <button
+              <Link
                 key={tab.id}
-                onClick={() => router.push(tab.href)}
+                href={tab.href}
                 className={cn(
-                  "flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors select-none",
                   isActive
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
@@ -77,7 +75,7 @@ export function AppTabs() {
               >
                 <Icon className="h-4 w-4" />
                 <span className="hidden sm:inline">{tab.label}</span>
-              </button>
+              </Link>
             )
           })}
         </nav>

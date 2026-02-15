@@ -107,26 +107,26 @@ export function CategoryCard({
                   <Wallet className="h-3.5 w-3.5 text-primary" />
                 </div>
               )}
-              <h3 className="truncate text-base font-semibold text-foreground">{category.name}</h3>
+              <h3 className="truncate text-base font-semibold text-foreground select-none">{category.name}</h3>
               {!isIncome && category.splitBy && category.splitBy > 1 && (
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground select-none">
                   <SplitSquareHorizontal className="h-3 w-3" />
                   {`\u00F7${category.splitBy}`}
                 </span>
               )}
               {isIncome && (
-                <span className="inline-flex shrink-0 items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                <span className="inline-flex shrink-0 items-center rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary select-none">
                   Saldos
                 </span>
               )}
             </div>
             {!isIncome && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground select-none">
                 {paidCount} de {category.bills.length} pagas
               </p>
             )}
             {isIncome && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-xs text-muted-foreground select-none">
                 {category.bills.length} {category.bills.length === 1 ? "entrada" : "entradas"}
               </p>
             )}

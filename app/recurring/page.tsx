@@ -164,7 +164,7 @@ export default function RecurringPage() {
         <AppTabs />
         
         <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between select-none">
             <div>
               <h1 className="text-3xl font-bold tracking-tight text-foreground">Pagamentos Recorrentes</h1>
               <p className="mt-1 text-muted-foreground">
@@ -182,12 +182,12 @@ export default function RecurringPage() {
           <div className="mb-8 grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Assinaturas Ativas</CardTitle>
+                <CardTitle className="text-sm font-medium select-none">Assinaturas Ativas</CardTitle>
                 <Repeat className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{activeSubscriptions.length}</div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 select-none">
                   {inactiveSubscriptions.length} inativas
                 </p>
               </CardContent>
@@ -195,12 +195,12 @@ export default function RecurringPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Custo Mensal</CardTitle>
+                <CardTitle className="text-sm font-medium select-none">Custo Mensal</CardTitle>
                 <DollarSign className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-500">{formatCurrency(totalMonthly)}</div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 select-none">
                   Total das assinaturas ativas
                 </p>
               </CardContent>
@@ -208,12 +208,12 @@ export default function RecurringPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Custo Anual</CardTitle>
+                <CardTitle className="text-sm font-medium select-none">Custo Anual</CardTitle>
                 <Calendar className="h-4 w-4 text-red-500" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-red-500">{formatCurrency(totalYearly)}</div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1 select-none">
                   Projeção anual
                 </p>
               </CardContent>
@@ -221,7 +221,7 @@ export default function RecurringPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Próximo Vencimento</CardTitle>
+                <CardTitle className="text-sm font-medium select-none">Próximo Vencimento</CardTitle>
                 <AlertCircle className="h-4 w-4 text-orange-500" />
               </CardHeader>
               <CardContent>
@@ -236,7 +236,7 @@ export default function RecurringPage() {
                         }).nextBillingDate
                       )} dias
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1 select-none">
                       Próximo pagamento
                     </p>
                   </>
@@ -250,7 +250,7 @@ export default function RecurringPage() {
           {/* Active Subscriptions */}
           {activeSubscriptions.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-xl font-semibold mb-4">Assinaturas Ativas</h2>
+              <h2 className="text-xl font-semibold mb-4 select-none">Assinaturas Ativas</h2>
               <div className="grid gap-4">
                 {activeSubscriptions.map((subscription) => {
                   const billingStatus = getBillingStatus(subscription.nextBillingDate)
@@ -337,7 +337,7 @@ export default function RecurringPage() {
 
           {/* Inactive Subscriptions */}
           {inactiveSubscriptions.length > 0 && (
-            <div className="mb-8">
+            <div className="mb-8 select-none">
               <h2 className="text-xl font-semibold mb-4">Assinaturas Inativas</h2>
               <div className="grid gap-4">
                 {inactiveSubscriptions.map((subscription) => (
