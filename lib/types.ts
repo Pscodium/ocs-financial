@@ -21,6 +21,50 @@ export interface MonthData {
   /** Format: "YYYY-MM" */
   monthKey: string
   categories: Category[]
+  budgets?: Budget[]
+  investments?: Investment[]
+  goals?: FinancialGoal[]
+  subscriptions?: Subscription[]
+}
+
+export interface Budget {
+  id: string
+  categoryId?: string
+  categoryName: string
+  limit: number
+  spent: number
+  monthKey: string
+}
+
+export interface Investment {
+  id: string
+  name: string
+  type: "stocks" | "funds" | "crypto" | "savings" | "real-estate" | "other"
+  amount: number
+  purchaseDate: string
+  currentValue?: number
+  notes?: string
+}
+
+export interface FinancialGoal {
+  id: string
+  name: string
+  targetAmount: number
+  currentAmount: number
+  deadline?: string
+  category: "emergency" | "purchase" | "vacation" | "education" | "retirement" | "other"
+  icon?: string
+}
+
+export interface Subscription {
+  id: string
+  name: string
+  amount: number
+  billingCycle: "monthly" | "quarterly" | "yearly"
+  nextBillingDate: string
+  category?: string
+  active: boolean
+  notes?: string
 }
 
 export function createId(): string {

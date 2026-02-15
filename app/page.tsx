@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useFinance } from "@/hooks/use-finance"
 import { useAuth } from "@/hooks/use-auth"
 import { AuthGuard } from "@/components/auth-guard"
+import { AppTabs } from "@/components/app-tabs"
 import { SummaryCards } from "@/components/summary-cards"
 import { CategoryCard } from "@/components/category-card"
 import { MonthSelector } from "@/components/month-selector"
@@ -30,16 +31,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Copy, Wallet, LogOut, Wifi, WifiOff, RefreshCw, CloudUpload } from "lucide-react"
+import { 
+  Plus, 
+  Copy, 
+  Wallet, 
+  LogOut, 
+  Wifi, 
+  WifiOff, 
+  RefreshCw, 
+  CloudUpload,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  LayoutDashboard
+} from "lucide-react"
 import { toast } from "sonner"
 import { getMonthLabel } from "@/lib/types"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
 function shiftMonth(monthKey: string, delta: number): string {
   const [year, month] = monthKey.split("-").map(Number)
@@ -108,7 +115,10 @@ export default function HomePage() {
   if (!finance.loaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-muted-foreground animate-pulse">Carregando dados financeiros...</p>
+        </div>
       </div>
     )
   }
@@ -151,314 +161,393 @@ export default function HomePage() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-background">
-        {/* Header */}
-        <header className="sticky top-0 z-10 border-b border-border bg-card/80 backdrop-blur-md">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-                <Wallet className="h-5 w-5 text-primary-foreground" />
+      <div className="min-h-screen bg-muted/20 pb-12">
+        {/* Modern Header */}
+        <header className="sticky top-0 z-20 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="border-b">
+          <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2.5 rounded-lg bg-primary/10 px-3 py-1.5 transition-colors hover:bg-primary/20">
+                <Wallet className="h-5 w-5 text-primary" />
+                <span className="font-semibold tracking-tight text-foreground hidden sm:inline-block">Gestor Financeiro</span>
               </div>
-              <h1 className="text-lg font-bold tracking-tight text-foreground">Gestor Financeiro</h1>
-            </div>
-            
-            <div className="flex items-center gap-3">
+              <div className="h-6 w-px bg-border hidden sm:block" />
               <MonthSelector currentMonthKey={finance.currentMonthKey} onChange={finance.setCurrentMonthKey} />
-              
-              {/* API Status */}
-              <div className="flex items-center gap-1.5 text-xs">
+            </div>
+
+            <div className="flex items-center gap-4">
+              {/* API Status Indicator */}
+              <div className="hidden items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs md:flex">
                 {finance.isSyncing ? (
                   <>
                     <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    <span className="hidden text-muted-foreground sm:inline">Sincronizando...</span>
+                    <span className="text-muted-foreground">Sincronizando...</span>
                   </>
                 ) : finance.isApiOnline ? (
                   <>
                     <Wifi className="h-3.5 w-3.5 text-green-600" />
-                    <span className="hidden text-green-600 sm:inline">Online</span>
+                    <span className="font-medium text-green-600">Online</span>
                   </>
                 ) : (
                   <>
                     <WifiOff className="h-3.5 w-3.5 text-orange-600" />
-                    <span className="hidden text-orange-600 sm:inline">Offline</span>
+                    <span className="font-medium text-orange-600">Offline</span>
                   </>
                 )}
               </div>
 
-              {/* User menu */}
-              <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-1.5">
-                <LogOut className="h-4 w-4" />
-                <span className="hidden sm:inline">{user?.firstName || "Sair"}</span>
-              </Button>
+              <div className="flex items-center gap-2">
+                 <Button 
+                  onClick={() => setShowAddCategory(true)} 
+                  size="sm"
+                  className="hidden sm:flex"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Nova Categoria
+                </Button>
+                <Button variant="ghost" size="icon" onClick={handleLogout} className="text-muted-foreground hover:text-foreground">
+                  <LogOut className="h-5 w-5" />
+                  <span className="sr-only">Sair</span>
+                </Button>
+              </div>
             </div>
+          </div>
+          <AppTabs />
           </div>
         </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6">
-        {/* Offline Changes Alert */}
-        {finance.hasPendingChanges && finance.isApiOnline && (
-          <div className="mb-6 rounded-lg border border-orange-200 bg-orange-50 px-4 py-4 dark:border-orange-900 dark:bg-orange-950">
-            <div className="flex items-start gap-3">
-              <CloudUpload className="h-5 w-5 flex-shrink-0 text-orange-600 dark:text-orange-400 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-orange-900 dark:text-orange-100">
-                  Você tem mudanças feitas offline
-                </p>
-                <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">
-                  Escolha como sincronizar seus dados:
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          {/* Welcome & Action Bar Mobile */}
+          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h1>
+              <p className="mt-1 text-muted-foreground">
+                Visão geral e gestão de contas para {getMonthLabel(finance.currentMonthKey)}
+              </p>
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2 sm:hidden">
+              <Button onClick={() => setShowAddCategory(true)} size="sm" className="flex-1">
+                <Plus className="mr-1.5 h-4 w-4" />
+                Nova Categoria
+              </Button>
+            </div>
+
+            {finance.currentMonth && finance.currentMonth.categories.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setShowDuplicateConfirm(true)}
+                className="hidden md:flex"
+              >
+                <Copy className="mr-1.5 h-4 w-4" />
+                Copiar para o próximo mês
+              </Button>
+            )}
+          </div>
+
+          {/* Offline Changes Alert - Re-styled */}
+          {finance.hasPendingChanges && finance.isApiOnline && (
+            <div className="mb-8 overflow-hidden rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/20">
+              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-full bg-orange-100 p-2 dark:bg-orange-900/40">
+                    <CloudUpload className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-orange-900 dark:text-orange-100">Sincronização Pendente</h3>
+                    <p className="text-sm text-orange-700 dark:text-orange-300">Você tem alterações salvas offline que precisam ser enviadas.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
                   <Button
                     onClick={handleSyncOfflineChanges}
                     disabled={finance.isSyncing}
                     size="sm"
-                    className="bg-orange-600 hover:bg-orange-700"
+                    className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-500"
                   >
-                    {finance.isSyncing ? (
-                      <>
-                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        Sincronizando...
-                      </>
-                    ) : (
-                      <>
-                        <CloudUpload className="mr-1.5 h-3.5 w-3.5" />
-                        Enviar Mudanças ao Servidor
-                      </>
-                    )}
+                    {finance.isSyncing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Sincronizar
                   </Button>
                   <Button
                     onClick={handleDiscardOfflineChanges}
                     disabled={finance.isSyncing}
                     size="sm"
-                    variant="outline"
-                    className="border-orange-300 text-orange-700 hover:bg-orange-100 dark:border-orange-700 dark:text-orange-300 dark:hover:bg-orange-900"
+                    variant="ghost"
+                    className="text-orange-700 hover:bg-orange-100 hover:text-orange-800 dark:text-orange-300 dark:hover:bg-orange-900/50"
                   >
-                    {finance.isSyncing ? (
-                      <>
-                        <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                        Sincronizando...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                        Usar Dados do Servidor
-                      </>
-                    )}
+                    Descartar Offline
                   </Button>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Summary */}
-        <SummaryCards 
-          total={total} 
-          paid={paid} 
-          income={income} 
-          myShare={myShare} 
-          sobra={sobra}
-          previousMonthData={previousMonthData}
-        />
-
-        {/* Actions bar */}
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <Button onClick={() => setShowAddCategory(true)} size="sm">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Nova Categoria
-          </Button>
-          {finance.currentMonth && finance.currentMonth.categories.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setShowDuplicateConfirm(true)}>
-              <Copy className="mr-1.5 h-4 w-4" />
-              Copiar para proximo mes
-            </Button>
           )}
-        </div>
 
-        {/* Income Categories */}
-        {incomeCategories.length > 0 && (
-          <div className="mt-6 flex flex-col gap-4">
-            {incomeCategories.map((category) => (
-              <CategoryCard
-                key={category.id}
-                category={category}
-                totalAmount={finance.getTotalByCategory(category)}
-                paidAmount={0}
-                onToggleBill={() => {}}
-                onUpdateBill={(catId, billId, updates) => {
-                  finance.updateBill(catId, billId, updates)
-                  toast.success("Saldo atualizado!")
-                }}
-                onRemoveBill={(catId, billId) => {
-                  finance.removeBill(catId, billId)
-                  toast.success("Saldo removido!")
-                }}
-                onAddBill={(catId, bill) => {
-                  finance.addBill(catId, bill)
-                  toast.success("Saldo adicionado!")
-                }}
-                onUpdateCategory={(catId, name, splitBy) => {
-                  finance.updateCategory(catId, name, splitBy)
-                  toast.success("Categoria atualizada!")
-                }}
-                onRemoveCategory={(catId) => {
-                  finance.removeCategory(catId)
-                  toast.success("Categoria removida!")
-                }}
-              />
-            ))}
+          {/* Summary Cards */}
+          <div className="mb-10">
+            <SummaryCards 
+              total={total} 
+              paid={paid} 
+              income={income} 
+              myShare={myShare} 
+              sobra={sobra}
+              previousMonthData={previousMonthData}
+            />
           </div>
-        )}
 
-        {/* Bill Categories */}
-        <div className="mt-6 flex flex-col gap-4">
-          {billCategories.length === 0 && incomeCategories.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border py-16">
-              <Wallet className="h-10 w-10 text-muted-foreground" />
-              <div className="text-center">
-                <p className="font-medium text-foreground">Nenhuma categoria neste mes</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Crie uma nova categoria ou copie de outro mes
-                </p>
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+            {/* Left Column: Income (Takes 4/12 columns on large screens) */}
+            <div className="lg:col-span-12 xl:col-span-5 space-y-6">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2">
+                  <ArrowUpCircle className="h-5 w-5 text-green-500" />
+                  <h2 className="text-xl font-semibold tracking-tight">Entradas & Saldos</h2>
+                </div>
+                {incomeCategories.length > 0 && <span className="text-sm text-muted-foreground">{incomeCategories.length} categorias</span>}
               </div>
-              <Button size="sm" onClick={() => setShowAddCategory(true)} className="mt-2">
-                <Plus className="mr-1.5 h-4 w-4" />
-                Criar Categoria
-              </Button>
-            </div>
-          ) : (
-            billCategories.map((category) => (
-              <CategoryCard
-                key={category.id}
-                category={category}
-                totalAmount={finance.getTotalByCategory(category)}
-                paidAmount={finance.getPaidByCategory(category)}
-                onToggleBill={(catId, billId) => {
-                  finance.toggleBillPaid(catId, billId)
-                }}
-                onUpdateBill={(catId, billId, updates) => {
-                  finance.updateBill(catId, billId, updates)
-                  toast.success("Conta atualizada!")
-                }}
-                onRemoveBill={(catId, billId) => {
-                  finance.removeBill(catId, billId)
-                  toast.success("Conta removida!")
-                }}
-                onAddBill={(catId, bill) => {
-                  finance.addBill(catId, bill)
-                  toast.success("Conta adicionada!")
-                }}
-                onUpdateCategory={(catId, name, splitBy) => {
-                  finance.updateCategory(catId, name, splitBy)
-                  toast.success("Categoria atualizada!")
-                }}
-                onRemoveCategory={(catId) => {
-                  finance.removeCategory(catId)
-                  toast.success("Categoria removida!")
-                }}
-              />
-            ))
-          )}
-        </div>
 
-        {/* Chart */}
-        {finance.allMonths.length > 0 && (
-          <div className="mb-12 mt-8">
-            <MonthlyChart allMonths={finance.allMonths} />
+              {incomeCategories.length > 0 ? (
+                <div className="grid gap-5">
+                  {incomeCategories.map((category) => (
+                    <CategoryCard
+                      key={category.id}
+                      category={category}
+                      totalAmount={finance.getTotalByCategory(category)}
+                      paidAmount={0}
+                      onToggleBill={() => {}}
+                      onUpdateBill={(catId, billId, updates) => {
+                        finance.updateBill(catId, billId, updates)
+                        toast.success("Saldo atualizado!")
+                      }}
+                      onRemoveBill={(catId, billId) => {
+                        finance.removeBill(catId, billId)
+                        toast.success("Saldo removido!")
+                      }}
+                      onAddBill={(catId, bill) => {
+                        finance.addBill(catId, bill)
+                        toast.success("Saldo adicionado!")
+                      }}
+                      onUpdateCategory={(catId, name, splitBy) => {
+                        finance.updateCategory(catId, name, splitBy)
+                        toast.success("Categoria atualizada!")
+                      }}
+                      onRemoveCategory={(catId) => {
+                        finance.removeCategory(catId)
+                        toast.success("Categoria removida!")
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed p-8 text-center text-muted-foreground bg-card/50">
+                   <p className="text-sm">Nenhuma categoria de entrada.</p>
+                   <Button variant="link" onClick={() => {
+                        setNewCatType('income')
+                        setShowAddCategory(true)
+                   }} className="mt-2 h-auto p-0">
+                     Adicionar Entradas
+                   </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Bills (Takes 8/12 columns on large screens) */}
+            <div className="lg:col-span-12 xl:col-span-7 space-y-6">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2">
+                   <ArrowDownCircle className="h-5 w-5 text-red-500" />
+                   <h2 className="text-xl font-semibold tracking-tight">Despesas & Contas</h2>
+                </div>
+                {billCategories.length > 0 && <span className="text-sm text-muted-foreground">{billCategories.length} categorias</span>}
+              </div>
+
+              {billCategories.length > 0 ? (
+                <div className="grid gap-5">
+                  {billCategories.map((category) => (
+                    <CategoryCard
+                      key={category.id}
+                      category={category}
+                      totalAmount={finance.getTotalByCategory(category)}
+                      paidAmount={finance.getPaidByCategory(category)}
+                      onToggleBill={(catId, billId) => {
+                        finance.toggleBillPaid(catId, billId)
+                      }}
+                      onUpdateBill={(catId, billId, updates) => {
+                        finance.updateBill(catId, billId, updates)
+                        toast.success("Conta atualizada!")
+                      }}
+                      onRemoveBill={(catId, billId) => {
+                        finance.removeBill(catId, billId)
+                        toast.success("Conta removida!")
+                      }}
+                      onAddBill={(catId, bill) => {
+                        finance.addBill(catId, bill)
+                        toast.success("Conta adicionada!")
+                      }}
+                      onUpdateCategory={(catId, name, splitBy) => {
+                        finance.updateCategory(catId, name, splitBy)
+                        toast.success("Categoria atualizada!")
+                      }}
+                      onRemoveCategory={(catId) => {
+                        finance.removeCategory(catId)
+                        toast.success("Categoria removida!")
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : incomeCategories.length > 0 ? (
+                 /* Has income but no bills */
+                 <div className="rounded-xl border border-dashed p-10 flex flex-col items-center justify-center text-center text-muted-foreground bg-card/50">
+                   <div className="bg-muted p-4 rounded-full mb-4">
+                     <Wallet className="w-8 h-8 text-muted-foreground/50" />
+                   </div>
+                   <p className="font-medium">Nenhuma despesa cadastrada</p>
+                   <p className="text-sm mt-1 max-w-xs">Comece adicionando categorias de despesas para controlar seus gastos deste mês.</p>
+                   <Button variant="outline" className="mt-4" onClick={() => {
+                      setNewCatType('bills')
+                      setShowAddCategory(true)
+                   }}>
+                     Criar Categoria de Despesas
+                   </Button>
+                   <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowDuplicateConfirm(true)}>
+                     <Copy className="mr-1.5 h-3 w-3" />
+                     Copiar do mês anterior
+                   </Button>
+                 </div>
+              ) : (
+                /* No categories at all - Shown in bills column if empty */
+                <div className="rounded-xl border border-dashed p-10 flex flex-col items-center justify-center text-center text-muted-foreground bg-card/50">
+                    <p>Você ainda não adicionou nenhuma conta este mês.</p>
+                    <div className="flex gap-2 mt-4">
+                      <Button onClick={() => setShowAddCategory(true)}>Criar Categoria</Button>
+                      <Button variant="outline" onClick={() => setShowDuplicateConfirm(true)}>Copiar Mês Anterior</Button>
+                    </div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </main>
 
-      {/* Add Category Dialog */}
-      <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-foreground">Nova Categoria</DialogTitle>
-            <DialogDescription className="text-muted-foreground">
-              Crie uma nova categoria para agrupar suas contas ou saldos.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-4 py-2">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="new-cat-type" className="text-foreground">
-                Tipo
-              </Label>
-              <Select value={newCatType} onValueChange={(v) => setNewCatType(v as "bills" | "income")}>
-                <SelectTrigger id="new-cat-type" className="text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="bills">Contas (com checkbox de pagamento)</SelectItem>
-                  <SelectItem value="income">Saldos em Conta (lista informativa)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="new-cat-name" className="text-foreground">
-                Nome da categoria
-              </Label>
-              <Input
-                id="new-cat-name"
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder={newCatType === "income" ? "Ex: Saldos em Conta" : "Ex: Contas Casa"}
-                className="text-foreground"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleAddCategory()
-                }}
-              />
-            </div>
-            {newCatType === "bills" && (
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="new-cat-split" className="text-foreground">
-                  Dividir total por (opcional)
-                </Label>
+          {/* Chart Section - Dashboard Style */}
+          {finance.allMonths.length > 0 && (
+             <div className="mt-12 space-y-4">
+                <div className="flex items-center gap-2">
+                   <LayoutDashboard className="h-5 w-5 text-muted-foreground" />
+                   <h2 className="text-xl font-semibold tracking-tight">Evolução Financeira</h2>
+                </div>
+                <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
+                  <div className="p-6">
+                    <MonthlyChart allMonths={finance.allMonths} />
+                  </div>
+                </div>
+             </div>
+          )}
+
+        </main>
+
+        {/* Floating Action Button mobile - if needed, but we have the button in header/top */}
+
+        {/* Dialogs */}
+        <Dialog open={showAddCategory} onOpenChange={setShowAddCategory}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Nova Categoria</DialogTitle>
+              <DialogDescription>
+                Organize suas finanças agrupando contas ou saldos.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="new-cat-type">Tipo de Categoria</Label>
+                <div className="grid grid-cols-2 gap-2">
+                   <div 
+                      className={cn(
+                        "cursor-pointer rounded-lg border-2 p-3 text-center transition-all hover:border-primary/50",
+                        newCatType === "bills" ? "border-primary bg-primary/5" : "border-muted bg-transparent"
+                      )}
+                      onClick={() => setNewCatType("bills")}
+                   >
+                      <div className="mb-1 flex justify-center"><ArrowDownCircle className="h-5 w-5 text-red-500" /></div>
+                      <span className="text-sm font-medium">Contas e Despesas</span>
+                   </div>
+                   <div 
+                      className={cn(
+                        "cursor-pointer rounded-lg border-2 p-3 text-center transition-all hover:border-primary/50",
+                        newCatType === "income" ? "border-primary bg-primary/5" : "border-muted bg-transparent"
+                      )}
+                      onClick={() => setNewCatType("income")}
+                   >
+                      <div className="mb-1 flex justify-center"><ArrowUpCircle className="h-5 w-5 text-green-500" /></div>
+                      <span className="text-sm font-medium">Entradas e Saldos</span>
+                   </div>
+                </div>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="new-cat-name">Nome da categoria</Label>
                 <Input
-                  id="new-cat-split"
-                  value={newCatSplit}
-                  onChange={(e) => setNewCatSplit(e.target.value)}
-                  placeholder="Ex: 2"
-                  type="number"
-                  min="1"
-                  className="text-foreground"
+                  id="new-cat-name"
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  placeholder={newCatType === "income" ? "Ex: Banco XYZ, Carteira" : "Ex: Casa, Cartão de Crédito"}
+                  autoFocus
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleAddCategory()
                   }}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Util para contas compartilhadas (ex: dividir contas da casa por 2)
-                </p>
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAddCategory(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleAddCategory}>Criar Categoria</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Duplicate Confirm Dialog */}
-      <AlertDialog open={showDuplicateConfirm} onOpenChange={setShowDuplicateConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-foreground">Copiar para proximo mes?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Todas as categorias e contas serao copiadas para{" "}
-              <strong>{getMonthLabel(shiftMonth(finance.currentMonthKey, 1))}</strong> com os mesmos valores,
-              mas todas marcadas como nao pagas.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDuplicate}>Copiar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+              {newCatType === "bills" && (
+                <div className="grid gap-2">
+                  <Label htmlFor="new-cat-split">Dividir total por (opcional)</Label>
+                  <div className="flex gap-2">
+                     <Input
+                        id="new-cat-split"
+                        value={newCatSplit}
+                        onChange={(e) => setNewCatSplit(e.target.value)}
+                        placeholder="Ex: 2"
+                        type="number"
+                        min="1"
+                        className="flex-1"
+                        onKeyDown={(e) => {
+                        if (e.key === "Enter") handleAddCategory()
+                        }}
+                     />
+                  </div>
+                  <p className="text-[0.8rem] text-muted-foreground">
+                    Ex: Coloque "2" para dividir o valor das contas desta categoria com outra pessoa.
+                  </p>
+                </div>
+              )}
+            </div>
+            <DialogFooter className="sm:justify-between">
+              <Button type="button" variant="ghost" onClick={() => setShowAddCategory(false)}>
+                Cancelar
+              </Button>
+              <Button type="button" onClick={handleAddCategory}>Criar Categoria</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Duplicate Confirm Dialog */}
+        <AlertDialog open={showDuplicateConfirm} onOpenChange={setShowDuplicateConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Copiar para próximo mês?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Isso criará uma cópia de todas as categorias e contas atuais para o mês de{" "}
+                <span className="font-semibold text-foreground">{getMonthLabel(shiftMonth(finance.currentMonthKey, 1))}</span>.
+                <br/><br/>
+                Os valores serão mantidos, mas o status de pagamento será redefinido para "pendente".
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDuplicate}>Confirmar Cópia</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
     </AuthGuard>
   )
 }

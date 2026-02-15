@@ -510,6 +510,398 @@ export function useFinance() {
     return getIncomeTotal() - getMyShare()
   }, [getIncomeTotal, getMyShare])
 
+  // Budget operations
+  const addBudget = useCallback(
+    async (budget: import("@/lib/types").Budget) => {
+      const months = ensureMonth(currentMonthKey)
+      const updated = months.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          budgets: [...(m.budgets || []), budget],
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.createBudget(currentMonthKey, budget)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to create budget:', error)
+      }
+    },
+    [currentMonthKey, ensureMonth],
+  )
+
+  const updateBudget = useCallback(
+    async (budget: import("@/lib/types").Budget) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          budgets: (m.budgets || []).map((b) => (b.id === budget.id ? budget : b)),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.updateBudget(currentMonthKey, budget.id, budget)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to update budget:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  const removeBudget = useCallback(
+    async (budgetId: string) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          budgets: (m.budgets || []).filter((b) => b.id !== budgetId),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.deleteBudget(currentMonthKey, budgetId)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to delete budget:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  // Investment operations
+  const addInvestment = useCallback(
+    async (investment: import("@/lib/types").Investment) => {
+      const months = ensureMonth(currentMonthKey)
+      const updated = months.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          investments: [...(m.investments || []), investment],
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.createInvestment(currentMonthKey, investment)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to create investment:', error)
+      }
+    },
+    [currentMonthKey, ensureMonth],
+  )
+
+  const updateInvestment = useCallback(
+    async (investment: import("@/lib/types").Investment) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          investments: (m.investments || []).map((i) => (i.id === investment.id ? investment : i)),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.updateInvestment(currentMonthKey, investment.id, investment)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to update investment:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  const removeInvestment = useCallback(
+    async (investmentId: string) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          investments: (m.investments || []).filter((i) => i.id !== investmentId),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.deleteInvestment(currentMonthKey, investmentId)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to delete investment:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  // Goal operations
+  const addGoal = useCallback(
+    async (goal: import("@/lib/types").FinancialGoal) => {
+      const months = ensureMonth(currentMonthKey)
+      const updated = months.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          goals: [...(m.goals || []), goal],
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.createGoal(currentMonthKey, goal)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to create goal:', error)
+      }
+    },
+    [currentMonthKey, ensureMonth],
+  )
+
+  const updateGoal = useCallback(
+    async (goal: import("@/lib/types").FinancialGoal) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          goals: (m.goals || []).map((g) => (g.id === goal.id ? goal : g)),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.updateGoal(currentMonthKey, goal.id, goal)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to update goal:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  const removeGoal = useCallback(
+    async (goalId: string) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          goals: (m.goals || []).filter((g) => g.id !== goalId),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.deleteGoal(currentMonthKey, goalId)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to delete goal:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  // Subscription operations
+  const addSubscription = useCallback(
+    async (subscription: import("@/lib/types").Subscription) => {
+      const months = ensureMonth(currentMonthKey)
+      const updated = months.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          subscriptions: [...(m.subscriptions || []), subscription],
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.createSubscription(currentMonthKey, subscription)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to create subscription:', error)
+      }
+    },
+    [currentMonthKey, ensureMonth],
+  )
+
+  const updateSubscription = useCallback(
+    async (subscription: import("@/lib/types").Subscription) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          subscriptions: (m.subscriptions || []).map((s) => (s.id === subscription.id ? subscription : s)),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.updateSubscription(currentMonthKey, subscription.id, subscription)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to update subscription:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
+  const removeSubscription = useCallback(
+    async (subscriptionId: string) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          subscriptions: (m.subscriptions || []).filter((s) => s.id !== subscriptionId),
+        }
+      })
+      
+      // Update UI immediately
+      setAllMonths(updated)
+      saveAllMonths(updated)
+      
+      // Call specific API endpoint
+      try {
+        const isOnline = await checkApiStatus()
+        if (isOnline) {
+          await api.deleteSubscription(currentMonthKey, subscriptionId)
+          setIsApiOnline(true)
+        }
+      } catch (error) {
+        if (error instanceof NetworkError) {
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
+        }
+        console.error('Failed to delete subscription:', error)
+      }
+    },
+    [allMonths, currentMonthKey],
+  )
+
   return {
     loaded,
     allMonths,
@@ -538,5 +930,18 @@ export function useFinance() {
     getIncomeTotal,
     getMyShare,
     getSobra,
+    // New features
+    addBudget,
+    updateBudget,
+    removeBudget,
+    addInvestment,
+    updateInvestment,
+    removeInvestment,
+    addGoal,
+    updateGoal,
+    removeGoal,
+    addSubscription,
+    updateSubscription,
+    removeSubscription,
   }
 }

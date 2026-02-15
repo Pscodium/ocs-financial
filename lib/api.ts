@@ -195,5 +195,117 @@ export const api = {
         headers
     })
     return
-  }
+  },
+
+  // Budgets CRUD
+  async getBudgets(monthKey: string): Promise<import("./types").Budget[]> {
+    const response = await fetchWithAuth(`/months/${monthKey}/budgets`)
+    return response.json()
+  },
+
+  async createBudget(monthKey: string, budget: import("./types").Budget): Promise<import("./types").Budget> {
+    const response = await fetchWithAuth(`/months/${monthKey}/budgets`, {
+      method: "POST",
+      body: JSON.stringify(budget),
+    })
+    return response.json()
+  },
+
+  async updateBudget(monthKey: string, budgetId: string, budget: import("./types").Budget): Promise<import("./types").Budget> {
+    const response = await fetchWithAuth(`/months/${monthKey}/budgets/${budgetId}`, {
+      method: "PUT",
+      body: JSON.stringify(budget),
+    })
+    return response.json()
+  },
+
+  async deleteBudget(monthKey: string, budgetId: string): Promise<void> {
+    await fetchWithAuth(`/months/${monthKey}/budgets/${budgetId}`, {
+      method: "DELETE",
+    })
+  },
+
+  // Investments CRUD
+  async getInvestments(monthKey: string): Promise<import("./types").Investment[]> {
+    const response = await fetchWithAuth(`/months/${monthKey}/investments`)
+    return response.json()
+  },
+
+  async createInvestment(monthKey: string, investment: import("./types").Investment): Promise<import("./types").Investment> {
+    const response = await fetchWithAuth(`/months/${monthKey}/investments`, {
+      method: "POST",
+      body: JSON.stringify(investment),
+    })
+    return response.json()
+  },
+
+  async updateInvestment(monthKey: string, investmentId: string, investment: import("./types").Investment): Promise<import("./types").Investment> {
+    const response = await fetchWithAuth(`/months/${monthKey}/investments/${investmentId}`, {
+      method: "PUT",
+      body: JSON.stringify(investment),
+    })
+    return response.json()
+  },
+
+  async deleteInvestment(monthKey: string, investmentId: string): Promise<void> {
+    await fetchWithAuth(`/months/${monthKey}/investments/${investmentId}`, {
+      method: "DELETE",
+    })
+  },
+
+  // Goals CRUD
+  async getGoals(monthKey: string): Promise<import("./types").FinancialGoal[]> {
+    const response = await fetchWithAuth(`/months/${monthKey}/goals`)
+    return response.json()
+  },
+
+  async createGoal(monthKey: string, goal: import("./types").FinancialGoal): Promise<import("./types").FinancialGoal> {
+    const response = await fetchWithAuth(`/months/${monthKey}/goals`, {
+      method: "POST",
+      body: JSON.stringify(goal),
+    })
+    return response.json()
+  },
+
+  async updateGoal(monthKey: string, goalId: string, goal: import("./types").FinancialGoal): Promise<import("./types").FinancialGoal> {
+    const response = await fetchWithAuth(`/months/${monthKey}/goals/${goalId}`, {
+      method: "PUT",
+      body: JSON.stringify(goal),
+    })
+    return response.json()
+  },
+
+  async deleteGoal(monthKey: string, goalId: string): Promise<void> {
+    await fetchWithAuth(`/months/${monthKey}/goals/${goalId}`, {
+      method: "DELETE",
+    })
+  },
+
+  // Subscriptions CRUD
+  async getSubscriptions(monthKey: string): Promise<import("./types").Subscription[]> {
+    const response = await fetchWithAuth(`/months/${monthKey}/subscriptions`)
+    return response.json()
+  },
+
+  async createSubscription(monthKey: string, subscription: import("./types").Subscription): Promise<import("./types").Subscription> {
+    const response = await fetchWithAuth(`/months/${monthKey}/subscriptions`, {
+      method: "POST",
+      body: JSON.stringify(subscription),
+    })
+    return response.json()
+  },
+
+  async updateSubscription(monthKey: string, subscriptionId: string, subscription: import("./types").Subscription): Promise<import("./types").Subscription> {
+    const response = await fetchWithAuth(`/months/${monthKey}/subscriptions/${subscriptionId}`, {
+      method: "PUT",
+      body: JSON.stringify(subscription),
+    })
+    return response.json()
+  },
+
+  async deleteSubscription(monthKey: string, subscriptionId: string): Promise<void> {
+    await fetchWithAuth(`/months/${monthKey}/subscriptions/${subscriptionId}`, {
+      method: "DELETE",
+    })
+  },
 }
