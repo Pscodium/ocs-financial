@@ -1,10 +1,10 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { api, type LoginResponse, ApiError, NetworkError } from "@/lib/api"
+import { api, type User, ApiError, NetworkError } from "@/lib/api"
 
 interface AuthContextType {
-  user: LoginResponse | null
+  user: User | null
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
@@ -15,38 +15,93 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<LoginResponse | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null
+
     // Check for existing token on mount
-    const token = localStorage.getItem("auth_token")
-    const userData = localStorage.getItem("user_data")
+    const token = typeof localStorage !== 'undefined' ? localStorage.getItem("access_token") : null
+    const userData = typeof localStorage !== 'undefined' ? localStorage.getItem("user_data") : null
     
     if (token && userData) {
       try {
         setUser(JSON.parse(userData))
       } catch {
-        localStorage.removeItem("auth_token")
-        localStorage.removeItem("user_data")
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem("access_token")
+          localStorage.removeItem("refresh_token")
+          localStorage.removeItem("user_data")
+        }
+      }
+    } else if (token) {
+      // If we have token but no user data, fetch it
+      api.getCurrentUser().then(userData => {
+        if (userData) {
+          setUser(userData)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem("user_data", JSON.stringify(userData))
+          }
+        }
+      }).catch(() => {
+        // Token is invalid, clear it
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem("access_token")
+          localStorage.removeItem("refresh_token")
+        }
+      })
+    }
+
+    intervalId = setInterval(() => {
+      const currentToken = typeof localStorage !== 'undefined' ? localStorage.getItem("access_token") : null
+      if (!currentToken) {
+        return
+      }
+
+      api.getCurrentUser().then(currentUser => {
+        if (currentUser) {
+          setUser(currentUser)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem("user_data", JSON.stringify(currentUser))
+          }
+        }
+      }).catch(() => {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem("access_token")
+          localStorage.removeItem("refresh_token")
+          localStorage.removeItem("user_data")
+        }
+        setUser(null)
+      })
+    }, 5 * 60 * 1000)
+
+    setIsLoading(false)
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
       }
     }
-    setIsLoading(false)
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await api.login(email, password)
+      // Login returns tokens
+      await api.login(email, password)
       
-      // Store token and user data
-      localStorage.setItem("auth_token", response.token)
-      localStorage.setItem("user_data", JSON.stringify(response))
-      document.cookie = `token=${response.token}; path=/; samesite=lax`
+      // Fetch user data
+      const userData = await api.getCurrentUser()
       
-      setUser(response)
+      if (userData) {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem("user_data", JSON.stringify(userData))
+        }
+        setUser(userData)
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError("Email ou senha inválidos")
@@ -63,9 +118,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await api.logout()
-    localStorage.removeItem("auth_token")
-    localStorage.removeItem("user_data")
-    document.cookie = "token=; Max-Age=0; path=/; samesite=lax"
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem("user_data")
+    }
     setUser(null)
     setError(null)
   }, [])

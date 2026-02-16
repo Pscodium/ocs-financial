@@ -2,10 +2,84 @@ import { parse } from "cookie"
 import type { MonthData } from "./types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
-const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || API_BASE_URL
+const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
+const CLIENT_ID = "ocs-financial"
+const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/callback` : "http://localhost:3001/callback"
 
 console.log('API_BASE_URL:', API_BASE_URL)
 console.log('API_AUTH_URL:', API_AUTH_URL)
+
+// PKCE Helper Functions
+function generateRandomString(length: number): string {
+  const array = new Uint8Array(length)
+  crypto.getRandomValues(array)
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+async function sha256(plain: string): Promise<ArrayBuffer> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(plain)
+  return crypto.subtle.digest('SHA-256', data)
+}
+
+function base64urlEncode(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+async function generatePKCE() {
+  const verifier = generateRandomString(32)
+  const hashed = await sha256(verifier)
+  const challenge = base64urlEncode(hashed)
+  return { verifier, challenge }
+}
+
+// Token Management
+interface TokenResponse {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+  token_type: string
+}
+
+function storeTokens(tokens: TokenResponse) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('access_token', tokens.access_token)
+    localStorage.setItem('refresh_token', tokens.refresh_token)
+    localStorage.setItem('token_expires_at', String(Date.now() + tokens.expires_in * 1000))
+  }
+}
+
+function getAccessToken(): string | null {
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('access_token')
+  }
+  return null
+}
+
+function getRefreshToken(): string | null {
+  if (typeof localStorage !== 'undefined') {
+    return localStorage.getItem('refresh_token')
+  }
+  return null
+}
+
+function clearTokens() {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('access_token')
+    localStorage.removeItem('refresh_token')
+    localStorage.removeItem('token_expires_at')
+    localStorage.removeItem('pkce_verifier')
+  }
+}
+
 
 export interface User {
   id: string
@@ -20,23 +94,11 @@ export interface User {
   verifiedEmail: boolean
   createdAt: string
   updatedAt: string
-  token: string
 }
 
 export interface LoginResponse {
-  id: string
-  profileIcon?: string
-  nickname?: string
-  external_id?: string | null
-  role: string
-  status: string
-  firstName: string
-  lastName: string
-  email: string
-  verifiedEmail: boolean
-  createdAt: string
-  updatedAt: string
-  token: string
+  code: string
+  state?: string
 }
 
 export class ApiError extends Error {
@@ -57,8 +119,7 @@ export class NetworkError extends Error {
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const cookieToken = typeof document !== "undefined" ? parse(document.cookie).token : undefined
-  const token = cookieToken || localStorage.getItem("auth_token")
+  const token = getAccessToken()
   
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -89,6 +150,34 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
       headers,
     })
 
+    // If unauthorized, try to refresh token
+    if (response.status === 401) {
+      const refreshToken = getRefreshToken()
+      if (refreshToken) {
+        try {
+          await api.refreshToken()
+          // Retry request with new token
+          const newToken = getAccessToken()
+          if (newToken) {
+            headers["Authorization"] = `Bearer ${newToken}`
+            const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
+              ...options,
+              headers,
+            })
+            if (!retryResponse.ok) {
+              throw new ApiError(retryResponse.status, `API Error: ${retryResponse.statusText}`)
+            }
+            return retryResponse
+          }
+        } catch (refreshError) {
+          // Refresh failed, clear tokens and throw
+          clearTokens()
+          throw new ApiError(401, "Session expired")
+        }
+      }
+      throw new ApiError(401, "Unauthorized")
+    }
+
     if (!response.ok) {
       throw new ApiError(response.status, `API Error: ${response.statusText}`)
     }
@@ -104,28 +193,176 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 }
 
 export const api = {
-  // Auth
-  async login(email: string, password: string): Promise<LoginResponse> {
+  // Auth - OAuth2 with PKCE Flow
+  async login(email: string, password: string): Promise<TokenResponse> {
     try {
-      const response = await fetch(`${API_AUTH_URL}/login`, {
+      // Generate PKCE
+      const pkce = await generatePKCE()
+      
+      // Store verifier for token exchange
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('pkce_verifier', pkce.verifier)
+      }
+
+      // Step 1: Login to get authorization code
+      const loginResponse = await fetch(`${API_AUTH_URL}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          client_id: CLIENT_ID,
+          redirect_uri: REDIRECT_URI,
+          code_challenge: pkce.challenge,
+          code_challenge_method: 'S256'
+        }),
       })
 
-      if (!response.ok) {
-        throw new ApiError(response.status, "Credenciais inválidas")
+      if (!loginResponse.ok) {
+        throw new ApiError(loginResponse.status, "Credenciais inválidas")
       }
 
-      const data = await response.json()
-      return data
+      const { code } = await loginResponse.json() as LoginResponse
+
+      // Step 2: Exchange authorization code for tokens
+      return await this.exchangeCode(code, pkce.verifier)
     } catch (error) {
       if (error instanceof ApiError) {
         throw error
       }
       throw new NetworkError()
+    }
+  },
+
+  async exchangeCode(code: string, verifier?: string): Promise<TokenResponse> {
+    try {
+      const codeVerifier = verifier || (typeof localStorage !== 'undefined' ? localStorage.getItem('pkce_verifier') : null)
+      
+      if (!codeVerifier) {
+        throw new Error('PKCE verifier not found')
+      }
+
+      const response = await fetch(`${API_AUTH_URL}/auth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          grant_type: 'authorization_code',
+          code,
+          redirect_uri: REDIRECT_URI,
+          client_id: CLIENT_ID,
+          code_verifier: codeVerifier
+        }),
+      })
+
+      if (!response.ok) {
+        throw new ApiError(response.status, "Failed to exchange authorization code")
+      }
+
+      const tokens = await response.json() as TokenResponse
+      
+      // Store tokens
+      storeTokens(tokens)
+      
+      // Clean up verifier
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('pkce_verifier')
+      }
+
+      return tokens
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new NetworkError()
+    }
+  },
+
+  async refreshToken(): Promise<TokenResponse> {
+    try {
+      const refreshToken = getRefreshToken()
+      
+      if (!refreshToken) {
+        throw new ApiError(401, 'No refresh token available')
+      }
+
+      const response = await fetch(`${API_AUTH_URL}/auth/token`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: CLIENT_ID
+        }),
+      })
+
+      if (!response.ok) {
+        throw new ApiError(response.status, "Failed to refresh token")
+      }
+
+      const tokens = await response.json() as TokenResponse
+      storeTokens(tokens)
+
+      return tokens
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new NetworkError()
+    }
+  },
+
+  async logout(): Promise<void> {
+    try {
+      const refreshToken = getRefreshToken()
+
+      if (refreshToken) {
+        await fetch(`${API_AUTH_URL}/auth/logout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            refresh_token: refreshToken,
+            client_id: CLIENT_ID
+          })
+        })
+      }
+
+      clearTokens()
+    } catch (error) {
+      // Always clear tokens even if logout request fails
+      clearTokens()
+    }
+  },
+
+  async getCurrentUser(): Promise<User | null> {
+    try {
+      const token = getAccessToken()
+      if (!token) {
+        return null
+      }
+
+      const response = await fetch(`${API_AUTH_URL}/check/auth`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        }
+      })
+
+      if (!response.ok) {
+        return null
+      }
+
+      return response.json()
+    } catch (error) {
+      return null
     }
   },
 
@@ -176,25 +413,6 @@ export const api = {
     } catch {
       return false
     }
-  },
-
-  async logout(): Promise<void> {
-    const cookieToken = typeof document !== "undefined" ? parse(document.cookie).token : undefined
-    const token = cookieToken || localStorage.getItem("auth_token")
-
-    const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-    }
-
-    if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-    }
-
-    await fetch(`${API_AUTH_URL}/logout`, {
-        method: "GET",
-        headers
-    })
-    return
   },
 
   // Budgets CRUD
