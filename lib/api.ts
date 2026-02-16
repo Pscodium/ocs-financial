@@ -348,13 +348,7 @@ export const api = {
         return null
       }
 
-      const response = await fetch(`${API_AUTH_URL}/check/auth`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        }
-      })
+      const response = await fetchWithAuth('/check/auth')
 
       if (!response.ok) {
         return null
