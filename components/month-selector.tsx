@@ -35,6 +35,14 @@ export function MonthSelector({ currentMonthKey, onChange }: MonthSelectorProps)
   const currentMonth = today.getMonth() + 1
   const currentYear = today.getFullYear()
 
+  const getShortMonthLabel = (monthKey: string) => {
+    const [yearValue, monthValue] = monthKey.split("-").map(Number)
+    const date = new Date(yearValue, monthValue - 1)
+    const monthLabel = date.toLocaleDateString("pt-BR", { month: "short" })
+    const shortMonth = monthLabel.replace(".", "").slice(0, 3)
+    return `${shortMonth} ${yearValue}`
+  }
+
   const handleMonthSelect = (monthIndex: number) => {
     const monthStr = String(monthIndex + 1).padStart(2, "0")
     onChange(`${selectedYear}-${monthStr}`)
@@ -64,7 +72,8 @@ export function MonthSelector({ currentMonthKey, onChange }: MonthSelectorProps)
             className="min-w-[10rem] justify-center gap-2 bg-transparent font-medium capitalize"
           >
             <Calendar className="h-4 w-4" />
-            {getMonthLabel(currentMonthKey)}
+            <span className="hidden sm:inline">{getMonthLabel(currentMonthKey)}</span>
+            <span className="sm:hidden">{getShortMonthLabel(currentMonthKey)}</span>
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-80 p-4" align="center">

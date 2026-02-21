@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
 import { api, type User, ApiError, NetworkError } from "@/lib/api"
+import { getUserPlanIdentifier } from "@/lib/feature-flags"
+import { RateLimitModal } from "@/components/rate-limit-modal"
 
 interface AuthContextType {
   user: User | null
@@ -19,6 +21,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isRateLimitOpen, setIsRateLimitOpen] = useState(false)
+  const [rateLimitPlanLabel, setRateLimitPlanLabel] = useState("seu plano atual")
+
+  const formatPlanLabel = useCallback((planIdentifier: string | null) => {
+    if (!planIdentifier) {
+      return "seu plano atual"
+    }
+    const words = planIdentifier
+      .replace(/[-_]+/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    return words.length > 0 ? words.join(" ") : "seu plano atual"
+  }, [])
 
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null
@@ -86,6 +103,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const handleRateLimit = (event: Event) => {
+      const planIdentifier = getUserPlanIdentifier(user)
+      const planLabel = formatPlanLabel(planIdentifier)
+      setRateLimitPlanLabel(planLabel)
+      setIsRateLimitOpen(true)
+    }
+
+    window.addEventListener("rate-limit", handleRateLimit)
+    return () => {
+      window.removeEventListener("rate-limit", handleRateLimit)
+    }
+  }, [formatPlanLabel, user])
 
   const login = useCallback(async (email: string, password: string) => {
     setIsLoading(true)
@@ -164,6 +199,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      <RateLimitModal
+        open={isRateLimitOpen}
+        planLabel={rateLimitPlanLabel}
+        onClose={() => setIsRateLimitOpen(false)}
+      />
     </AuthContext.Provider>
   )
 }

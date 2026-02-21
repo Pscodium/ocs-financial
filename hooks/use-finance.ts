@@ -232,6 +232,11 @@ export function useFinance() {
     scheduleSave(updated, modifiedMonthKey)
   }, [scheduleSave])
 
+  const applyLocalUpdate = useCallback((updated: MonthData[]) => {
+    setAllMonths(updated)
+    saveAllMonths(updated)
+  }, [])
+
   const syncOfflineChanges = useCallback(async () => {
     if (!hasPendingChanges) return
     
@@ -462,6 +467,67 @@ export function useFinance() {
     [allMonths, currentMonth, persist],
   )
 
+  const getNextAvailableMonthKey = useCallback((removedMonthKey: string, remaining: MonthData[]) => {
+    if (remaining.length === 0) {
+      return getCurrentMonthKey()
+    }
+
+    const sortedKeys = remaining.map((m) => m.monthKey).sort()
+    const currentIndex = sortedKeys.indexOf(removedMonthKey)
+
+    if (currentIndex > 0) {
+      return sortedKeys[currentIndex - 1]
+    }
+
+    if (currentIndex === -1) {
+      return sortedKeys[sortedKeys.length - 1]
+    }
+
+    return sortedKeys[0]
+  }, [])
+
+  const deleteMonth = useCallback(async (monthKey: string): Promise<boolean> => {
+    if (!monthKey) {
+      return false
+    }
+
+    const existing = allMonths.find((m) => m.monthKey === monthKey)
+    if (!existing) {
+      return false
+    }
+
+    try {
+      const isOnline = await checkApiStatus()
+      if (!isOnline) {
+        throw new NetworkError()
+      }
+
+      await api.deleteMonth(monthKey)
+      setIsApiOnline(true)
+
+      const remaining = allMonths.filter((m) => m.monthKey !== monthKey)
+      const nextKey = monthKey === currentMonthKey
+        ? getNextAvailableMonthKey(monthKey, remaining)
+        : currentMonthKey
+
+      serverMonthKeysRef.current.delete(monthKey)
+      applyLocalUpdate(remaining)
+      setCurrentMonthKey(nextKey)
+
+      return true
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) {
+        console.error("Rate limit ao deletar mes:", error)
+        return false
+      }
+      if (error instanceof NetworkError) {
+        setIsApiOnline(false)
+        throw error
+      }
+      throw error
+    }
+  }, [allMonths, applyLocalUpdate, currentMonthKey, getNextAvailableMonthKey])
+
   // Computed values
   const getBillCategories = useCallback((): Category[] => {
     if (!currentMonth) return []
@@ -522,26 +588,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.createBudget(currentMonthKey, budget)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao criar budget:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to create budget:', error)
       }
     },
-    [currentMonthKey, ensureMonth],
+    [applyLocalUpdate, currentMonthKey, ensureMonth],
   )
 
   const updateBudget = useCallback(
@@ -554,26 +626,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.updateBudget(currentMonthKey, budget.id, budget)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao atualizar budget:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to update budget:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   const removeBudget = useCallback(
@@ -586,26 +664,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.deleteBudget(currentMonthKey, budgetId)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao remover budget:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to delete budget:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   // Investment operations
@@ -620,26 +704,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.createInvestment(currentMonthKey, investment)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao criar investimento:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to create investment:', error)
       }
     },
-    [currentMonthKey, ensureMonth],
+    [applyLocalUpdate, currentMonthKey, ensureMonth],
   )
 
   const updateInvestment = useCallback(
@@ -652,26 +742,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.updateInvestment(currentMonthKey, investment.id, investment)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao atualizar investimento:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to update investment:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   const removeInvestment = useCallback(
@@ -684,26 +780,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.deleteInvestment(currentMonthKey, investmentId)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao remover investimento:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to delete investment:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   // Goal operations
@@ -718,26 +820,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.createGoal(currentMonthKey, goal)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao criar meta:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to create goal:', error)
       }
     },
-    [currentMonthKey, ensureMonth],
+    [applyLocalUpdate, currentMonthKey, ensureMonth],
   )
 
   const updateGoal = useCallback(
@@ -750,26 +858,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.updateGoal(currentMonthKey, goal.id, goal)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao atualizar meta:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to update goal:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   const removeGoal = useCallback(
@@ -782,26 +896,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.deleteGoal(currentMonthKey, goalId)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao remover meta:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to delete goal:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   // Subscription operations
@@ -816,26 +936,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.createSubscription(currentMonthKey, subscription)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao criar assinatura:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to create subscription:', error)
       }
     },
-    [currentMonthKey, ensureMonth],
+    [applyLocalUpdate, currentMonthKey, ensureMonth],
   )
 
   const updateSubscription = useCallback(
@@ -848,26 +974,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.updateSubscription(currentMonthKey, subscription.id, subscription)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao atualizar assinatura:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to update subscription:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   const removeSubscription = useCallback(
@@ -880,26 +1012,32 @@ export function useFinance() {
         }
       })
       
-      // Update UI immediately
-      setAllMonths(updated)
-      saveAllMonths(updated)
-      
       // Call specific API endpoint
       try {
         const isOnline = await checkApiStatus()
         if (isOnline) {
           await api.deleteSubscription(currentMonthKey, subscriptionId)
           setIsApiOnline(true)
+          applyLocalUpdate(updated)
+        } else {
+          applyLocalUpdate(updated)
+          setPendingOfflineChanges(true)
+          setHasPendingChanges(true)
         }
       } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao remover assinatura:", error)
+          return
+        }
         if (error instanceof NetworkError) {
           setPendingOfflineChanges(true)
           setHasPendingChanges(true)
+          applyLocalUpdate(updated)
         }
         console.error('Failed to delete subscription:', error)
       }
     },
-    [allMonths, currentMonthKey],
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   return {
@@ -921,6 +1059,7 @@ export function useFinance() {
     removeBill,
     toggleBillPaid,
     duplicateMonthTo,
+    deleteMonth,
     getBillCategories,
     getIncomeCategories,
     getTotalByCategory,

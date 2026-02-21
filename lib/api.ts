@@ -5,6 +5,11 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
 const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/callback` : "http://localhost:3001/callback"
+const MONTHS_CACHE_TTL_MS = 2000
+
+let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
+let monthsCache: MonthData[] | null = null
+let monthsCacheUpdatedAt = 0
 
 console.log('API_BASE_URL:', API_BASE_URL)
 console.log('API_AUTH_URL:', API_AUTH_URL)
@@ -80,12 +85,18 @@ function clearTokens() {
   }
 }
 
+function invalidateMonthsCache() {
+  monthsCache = null
+  monthsCacheUpdatedAt = 0
+}
+
 
 export interface User {
   id: string
   profileIcon?: string
   nickname?: string
   external_id?: string | null
+  plan?: string | null
   role: string
   status: string
   firstName: string
@@ -150,11 +161,31 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers["Authorization"] = `Bearer ${token}`
   }
 
+  const emitRateLimitEvent = (response: Response) => {
+    if (typeof window === "undefined") {
+      return
+    }
+    window.dispatchEvent(
+      new CustomEvent("rate-limit", {
+        detail: {
+          path: url,
+          status: response.status,
+          retryAfter: response.headers.get("Retry-After"),
+        },
+      }),
+    )
+  }
+
   try {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
       headers,
     })
+
+    if (response.status === 429) {
+      emitRateLimitEvent(response)
+      throw new ApiError(429, "Rate limit exceeded")
+    }
 
     // If unauthorized, try to refresh token
     if (response.status === 401) {
@@ -170,6 +201,11 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
               ...options,
               headers,
             })
+            if (retryResponse.status === 429) {
+              emitRateLimitEvent(retryResponse)
+              throw new ApiError(429, "Rate limit exceeded")
+            }
+
             if (!retryResponse.ok) {
               throw new ApiError(retryResponse.status, `API Error: ${retryResponse.statusText}`)
             }
@@ -389,8 +425,31 @@ export const api = {
 
   // Months CRUD
   async getMonths(): Promise<MonthData[]> {
-    const response = await fetchWithAuth("/months")
-    return response.json()
+    const now = Date.now()
+
+    if (monthsCache && now - monthsCacheUpdatedAt < MONTHS_CACHE_TTL_MS) {
+      return monthsCache
+    }
+
+    if (inFlightGetMonthsRequest) {
+      return inFlightGetMonthsRequest
+    }
+
+    const request = (async () => {
+      const response = await fetchWithAuth("/months")
+      const data = (await response.json()) as MonthData[]
+      monthsCache = data
+      monthsCacheUpdatedAt = Date.now()
+      return data
+    })()
+
+    inFlightGetMonthsRequest = request
+
+    try {
+      return await request
+    } finally {
+      inFlightGetMonthsRequest = null
+    }
   },
 
   async getMonthByKey(monthKey: string): Promise<MonthData> {
@@ -401,6 +460,7 @@ export const api = {
   },
 
   async createMonth(monthData: MonthData): Promise<MonthData> {
+    invalidateMonthsCache()
     const response = await fetchWithAuth("/months", {
       method: "POST",
       body: JSON.stringify(monthData),
@@ -414,11 +474,19 @@ export const api = {
   },
 
   async updateMonth(monthKey: string, monthData: MonthData): Promise<MonthData> {
+    invalidateMonthsCache()
     const response = await fetchWithAuth(`/months/${monthKey}`, {
       method: "PUT",
       body: JSON.stringify(monthData),
     })
     return await response.json()
+  },
+
+  async deleteMonth(monthKey: string): Promise<void> {
+    invalidateMonthsCache()
+    await fetchWithAuth(`/months/${monthKey}`, {
+      method: "DELETE",
+    })
   },
 
   // Health check

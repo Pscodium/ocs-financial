@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { usePlanFeatures } from "@/hooks/use-plan-features"
 import {
   LayoutDashboard,
   Target,
@@ -18,47 +19,60 @@ const tabs = [
     label: "Dashboard",
     icon: LayoutDashboard,
     href: "/",
+    route: "/" as const,
   },
   {
     id: "budgets",
     label: "Orçamentos",
     icon: Target,
     href: "/budgets",
+    route: "/budgets" as const,
   },
   {
     id: "investments",
     label: "Investimentos",
     icon: TrendingUp,
     href: "/investments",
+    route: "/investments" as const,
   },
   {
     id: "goals",
     label: "Metas",
     icon: PiggyBank,
     href: "/goals",
+    route: "/goals" as const,
   },
   {
     id: "analytics",
     label: "Análises",
     icon: BarChart3,
     href: "/analytics",
+    route: "/analytics" as const,
   },
   {
     id: "recurring",
     label: "Recorrentes",
     icon: Repeat,
     href: "/recurring",
+    route: "/recurring" as const,
   },
 ]
 
 export function AppTabs() {
   const pathname = usePathname()
+  const { featureAccess } = usePlanFeatures()
+
+  const visibleTabs = tabs.filter((tab) => featureAccess[tab.route])
+
+  if (visibleTabs.length === 0) {
+    return null
+  }
 
   return (
     <div className="border-b bg-background">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <nav className="flex gap-1 overflow-x-auto" aria-label="Tabs">
-          {tabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon
             const isActive = pathname === tab.href
             

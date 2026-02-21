@@ -42,7 +42,8 @@ import {
   CloudUpload,
   ArrowUpCircle,
   ArrowDownCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  Trash2
 } from "lucide-react"
 import { toast } from "sonner"
 import { getMonthLabel } from "@/lib/types"
@@ -65,6 +66,7 @@ export default function HomePage() {
   const [newCatSplit, setNewCatSplit] = useState("")
   const [newCatType, setNewCatType] = useState<"bills" | "income">("bills")
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
+  const [showDeleteMonthConfirm, setShowDeleteMonthConfirm] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -92,6 +94,19 @@ export default function HomePage() {
     finance.duplicateMonthTo(nextMonth)
     setShowDuplicateConfirm(false)
     toast.success(`Contas copiadas para ${getMonthLabel(nextMonth)}`)
+  }
+
+  const handleDeleteMonth = async () => {
+    try {
+      const deleted = await finance.deleteMonth(finance.currentMonthKey)
+      if (deleted) {
+        toast.success(`Mes ${getMonthLabel(finance.currentMonthKey)} removido`)
+      }
+    } catch (error) {
+      toast.error("Nao foi possivel remover o mes. Tente novamente.")
+    } finally {
+      setShowDeleteMonthConfirm(false)
+    }
   }
 
   const handleSyncOfflineChanges = async () => {
@@ -173,6 +188,16 @@ export default function HomePage() {
               </div>
               <div className="h-6 w-px bg-border hidden sm:block" />
               <MonthSelector currentMonthKey={finance.currentMonthKey} onChange={finance.setCurrentMonthKey} />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={() => setShowDeleteMonthConfirm(true)}
+                disabled={!finance.currentMonth}
+                aria-label="Excluir mes"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
 
             <div className="flex items-center gap-4 select-none">
@@ -547,6 +572,23 @@ export default function HomePage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+          <AlertDialog open={showDeleteMonthConfirm} onOpenChange={setShowDeleteMonthConfirm}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir mes atual?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acao remove os dados de {getMonthLabel(finance.currentMonthKey)} do servidor. Essa acao nao pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteMonth} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Excluir mes
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
       </div>
     </AuthGuard>
   )
