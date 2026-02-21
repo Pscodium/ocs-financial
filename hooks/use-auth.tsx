@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string, fullName: string) => Promise<void>
   logout: () => void
   error: string | null
 }
@@ -116,6 +117,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const register = useCallback(async (email: string, password: string, fullName: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      await api.register({ email, password, fullName })
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setError("Este email já está em uso")
+        } else if (err.status === 400) {
+          setError("Dados de cadastro inválidos")
+        } else {
+          setError("Erro ao criar conta")
+        }
+      } else if (err instanceof NetworkError) {
+        setError("Não foi possível conectar ao servidor")
+      } else {
+        setError("Erro ao criar conta")
+      }
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   const logout = useCallback(async () => {
     await api.logout()
     if (typeof localStorage !== 'undefined') {
@@ -132,6 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        register,
         logout,
         error,
       }}

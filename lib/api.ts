@@ -101,6 +101,12 @@ export interface LoginResponse {
   state?: string
 }
 
+export interface RegisterPayload {
+  email: string
+  password: string
+  fullName: string
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -194,6 +200,27 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
 export const api = {
   // Auth - OAuth2 with PKCE Flow
+  async register(payload: RegisterPayload): Promise<void> {
+    try {
+      const response = await fetch(`${API_AUTH_URL}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        throw new ApiError(response.status, "Falha ao registrar usuário")
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error
+      }
+      throw new NetworkError()
+    }
+  },
+
   async login(email: string, password: string): Promise<TokenResponse> {
     try {
       // Generate PKCE
