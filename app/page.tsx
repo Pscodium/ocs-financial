@@ -36,10 +36,6 @@ import {
   Copy, 
   Wallet, 
   LogOut, 
-  Wifi, 
-  WifiOff, 
-  RefreshCw, 
-  CloudUpload,
   ArrowUpCircle,
   ArrowDownCircle,
   LayoutDashboard,
@@ -109,35 +105,6 @@ export default function HomePage() {
     }
   }
 
-  const handleSyncOfflineChanges = async () => {
-    try {
-      await finance.syncOfflineChanges()
-      toast.success("Sincronização concluída! Suas mudanças foram enviadas ao servidor.")
-    } catch (error) {
-      toast.error("Erro ao sincronizar. Tente novamente.")
-    }
-  }
-
-  const handleDiscardOfflineChanges = async () => {
-    try {
-      await finance.discardOfflineChanges()
-      toast.success("Dados sincronizados com o servidor. Mudanças offline descartadas.")
-    } catch (error) {
-      toast.error("Erro ao sincronizar. Tente novamente.")
-    }
-  }
-
-  if (!finance.loaded) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-          <p className="text-muted-foreground animate-pulse">Carregando dados financeiros...</p>
-        </div>
-      </div>
-    )
-  }
-
   const total = finance.getGrandTotal()
   const paid = finance.getGrandPaid()
   const income = finance.getIncomeTotal()
@@ -201,26 +168,6 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-4 select-none">
-              {/* API Status Indicator */}
-              <div className="hidden items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs md:flex">
-                {finance.isSyncing ? (
-                  <>
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    <span className="text-muted-foreground">Sincronizando...</span>
-                  </>
-                ) : finance.isApiOnline ? (
-                  <>
-                    <Wifi className="h-3.5 w-3.5 text-green-600" />
-                    <span className="font-medium text-green-600">Online</span>
-                  </>
-                ) : (
-                  <>
-                    <WifiOff className="h-3.5 w-3.5 text-orange-600" />
-                    <span className="font-medium text-orange-600">Offline</span>
-                  </>
-                )}
-              </div>
-
               <div className="flex items-center gap-2">
                  <Button 
                   onClick={() => setShowAddCategory(true)} 
@@ -270,43 +217,6 @@ export default function HomePage() {
               </Button>
             )}
           </div>
-
-          {/* Offline Changes Alert - Re-styled */}
-          {finance.hasPendingChanges && finance.isApiOnline && (
-            <div className="mb-8 overflow-hidden rounded-xl border border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/20">
-              <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-full bg-orange-100 p-2 dark:bg-orange-900/40">
-                    <CloudUpload className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-orange-900 dark:text-orange-100">Sincronização Pendente</h3>
-                    <p className="text-sm text-orange-700 dark:text-orange-300">Você tem alterações salvas offline que precisam ser enviadas.</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleSyncOfflineChanges}
-                    disabled={finance.isSyncing}
-                    size="sm"
-                    className="bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-500"
-                  >
-                    {finance.isSyncing ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
-                    Sincronizar
-                  </Button>
-                  <Button
-                    onClick={handleDiscardOfflineChanges}
-                    disabled={finance.isSyncing}
-                    size="sm"
-                    variant="ghost"
-                    className="text-orange-700 hover:bg-orange-100 hover:text-orange-800 dark:text-orange-300 dark:hover:bg-orange-900/50"
-                  >
-                    Descartar Offline
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Summary Cards */}
           <div className="mb-10">

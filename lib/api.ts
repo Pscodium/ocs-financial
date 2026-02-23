@@ -489,21 +489,6 @@ export const api = {
     })
   },
 
-  // Health check
-  async ping(): Promise<boolean> {
-    try {
-      const response = await fetch(`${API_BASE_URL}/health`, { 
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-      return response.ok
-    } catch {
-      return false
-    }
-  },
-
   // Budgets CRUD
   async getBudgets(monthKey: string): Promise<import("./types").Budget[]> {
     const response = await fetchWithAuth(`/months/${monthKey}/budgets`)

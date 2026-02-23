@@ -5,117 +5,39 @@ import type { Bill, Category, MonthData } from "@/lib/types"
 import { createId, getCurrentMonthKey, getDefaultData } from "@/lib/types"
 import { api, ApiError, NetworkError } from "@/lib/api"
 
-const STORAGE_KEY = "gestor-financeiro-data"
-const API_STATUS_KEY = "api-status"
-const PENDING_CHANGES_KEY = "pending-offline-changes"
-
-// Check if API is online
-async function checkApiStatus(): Promise<boolean> {
-  try {
-    const isOnline = await api.ping()
-    localStorage.setItem(API_STATUS_KEY, isOnline ? "online" : "offline")
-    return isOnline
-  } catch {
-    localStorage.setItem(API_STATUS_KEY, "offline")
-    return false
-  }
-}
-
-function loadAllMonths(): MonthData[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return []
-    return JSON.parse(raw) as MonthData[]
-  } catch {
-    return []
-  }
-}
-
-function saveAllMonths(months: MonthData[]) {
-  if (typeof window === "undefined") return
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(months))
-}
-
-function hasPendingOfflineChanges(): boolean {
-  if (typeof window === "undefined") return false
-  return localStorage.getItem(PENDING_CHANGES_KEY) === "true"
-}
-
-function setPendingOfflineChanges(pending: boolean) {
-  if (typeof window === "undefined") return
-  if (pending) {
-    localStorage.setItem(PENDING_CHANGES_KEY, "true")
-  } else {
-    localStorage.removeItem(PENDING_CHANGES_KEY)
-  }
-}
-
-// Sync with API
-async function syncWithApi(months: MonthData[]): Promise<MonthData[]> {
-  try {
-    const isOnline = await checkApiStatus()
-    if (!isOnline) {
-      return months // Return local data if offline
-    }
-
-    // Fetch from API
-    const apiMonths = await api.getMonths()
-    
-    // Save to localStorage as cache
-    saveAllMonths(apiMonths)
-    
-    return apiMonths
-  } catch (error) {
-    if (error instanceof NetworkError) {
-      // API offline - use local data
-      return months
-    }
-    throw error
-  }
-}
-
-// Save to both API and localStorage
 async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, modifiedMonthKey?: string): Promise<void> {
-  try {
-    const isOnline = await checkApiStatus()
-    
-    if (isOnline && modifiedMonthKey) {
-      // Save only the modified month to API
-      const modifiedMonth = months.find((m) => m.monthKey === modifiedMonthKey)
-      if (modifiedMonth) {
-        const hasServerMonth = serverMonthKeys?.has(modifiedMonth.monthKey)
+  if (!modifiedMonthKey) {
+    return
+  }
 
-        try {
-          if (hasServerMonth) {
-            await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
-          } else {
-            await api.createMonth(modifiedMonth)
-            serverMonthKeys?.add(modifiedMonth.monthKey)
-          }
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 404) {
-            await api.createMonth(modifiedMonth)
-            serverMonthKeys?.add(modifiedMonth.monthKey)
-          } else if (error instanceof ApiError && error.status === 409) {
-            await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
-            serverMonthKeys?.add(modifiedMonth.monthKey)
-          } else {
-            throw error
-          }
-        }
-      }
-    }
-    
-    // Always save to localStorage as cache/fallback
-    saveAllMonths(months)
-  } catch (error) {
-    if (error instanceof NetworkError) {
-      // API offline - save only to localStorage
-      saveAllMonths(months)
+  const modifiedMonth = months.find((m) => m.monthKey === modifiedMonthKey)
+  if (!modifiedMonth) {
+    return
+  }
+
+  const hasServerMonth = serverMonthKeys?.has(modifiedMonth.monthKey)
+
+  try {
+    if (hasServerMonth) {
+      await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
     } else {
-      throw error
+      await api.createMonth(modifiedMonth)
+      serverMonthKeys?.add(modifiedMonth.monthKey)
     }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      await api.createMonth(modifiedMonth)
+      serverMonthKeys?.add(modifiedMonth.monthKey)
+      return
+    }
+
+    if (error instanceof ApiError && error.status === 409) {
+      await api.updateMonth(modifiedMonth.monthKey, modifiedMonth)
+      serverMonthKeys?.add(modifiedMonth.monthKey)
+      return
+    }
+
+    throw error
   }
 }
 
@@ -123,7 +45,6 @@ export function useFinance() {
   const [allMonths, setAllMonths] = useState<MonthData[]>([])
   const [currentMonthKey, setCurrentMonthKey] = useState(getCurrentMonthKey())
   const [loaded, setLoaded] = useState(false)
-  const [isApiOnline, setIsApiOnline] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [hasPendingChanges, setHasPendingChanges] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -139,20 +60,12 @@ export function useFinance() {
     }
     saveTimerRef.current = setTimeout(async () => {
       if (!latestSaveRef.current) return
-      
-      const isOnline = await checkApiStatus()
-      if (!isOnline) {
-        // Offline - mark as having pending changes
-        setPendingOfflineChanges(true)
-        setHasPendingChanges(true)
-        saveAllMonths(latestSaveRef.current)
-      } else {
-        // Online - save normally and clear any pending changes flag
+
+      try {
         await saveToApi(latestSaveRef.current, serverMonthKeysRef.current, modifiedMonthKeyRef.current || undefined)
-        
-        // Clear pending changes since we're now saving online
-        setPendingOfflineChanges(false)
-        setHasPendingChanges(false)
+      } catch (error) {
+        if (error instanceof NetworkError) return
+        console.error("Erro ao salvar mês:", error)
       }
     }, 500)
   }, [])
@@ -160,54 +73,22 @@ export function useFinance() {
   useEffect(() => {
     async function loadData() {
       setIsSyncing(true)
-      
-      // Check if there are pending offline changes FIRST
-      const pending = hasPendingOfflineChanges()
-      
+
       try {
-        // Try to fetch from API first
         const apiMonths = await api.getMonths()
-        setIsApiOnline(true)
-        
-        // Filter out any invalid data
+
         const validMonths = apiMonths.filter((m) => m && m.monthKey)
         serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
-        
-        if (pending) {
-          // There are offline changes - DON'T overwrite localStorage
-          // Load from localStorage and show sync options
-          const localData = loadAllMonths()
-          const validLocalData = localData.filter((m) => m && m.monthKey)
-          setAllMonths(validLocalData)
-          setHasPendingChanges(true)
+
+        if (validMonths.length === 0) {
+          setAllMonths([getDefaultData()])
         } else {
-          // No offline changes - safe to use server data
-          saveAllMonths(validMonths)
           setAllMonths(validMonths)
-          setHasPendingChanges(false)
         }
+        setHasPendingChanges(false)
       } catch {
-        // API offline - use localStorage as fallback
-        setIsApiOnline(false)
-        const localData = loadAllMonths()
-        
-        if (localData.length === 0) {
-          // No data at all - create default
-          const defaultData = getDefaultData()
-          setAllMonths([defaultData])
-          saveAllMonths([defaultData])
-        } else {
-          // Filter out any invalid cached data
-          const validLocalData = localData.filter((m) => m && m.monthKey)
-          
-          // Use cached data from localStorage
-          setAllMonths(validLocalData)
-          serverMonthKeysRef.current = new Set(validLocalData.map((m) => m.monthKey))
-        }
-        
-        if (pending) {
-          setHasPendingChanges(true)
-        }
+        setAllMonths([getDefaultData()])
+        setHasPendingChanges(false)
       } finally {
         setIsSyncing(false)
         setLoaded(true)
@@ -234,76 +115,15 @@ export function useFinance() {
 
   const applyLocalUpdate = useCallback((updated: MonthData[]) => {
     setAllMonths(updated)
-    saveAllMonths(updated)
   }, [])
 
   const syncOfflineChanges = useCallback(async () => {
-    if (!hasPendingChanges) return
-    
-    setIsSyncing(true)
-    try {
-      const localData = loadAllMonths()
-      
-      // Send all months to API (offline overwrites online)
-      for (const month of localData) {
-        const hasServerMonth = serverMonthKeysRef.current.has(month.monthKey)
-        
-        try {
-          if (hasServerMonth) {
-            await api.updateMonth(month.monthKey, month)
-          } else {
-            await api.createMonth(month)
-            serverMonthKeysRef.current.add(month.monthKey)
-          }
-        } catch (error) {
-          if (error instanceof ApiError && error.status === 404) {
-            await api.createMonth(month)
-            serverMonthKeysRef.current.add(month.monthKey)
-          } else if (error instanceof ApiError && error.status === 409) {
-            await api.updateMonth(month.monthKey, month)
-          } else {
-            throw error
-          }
-        }
-      }
-      
-      // Clear pending changes flag
-      setPendingOfflineChanges(false)
-      setHasPendingChanges(false)
-      setIsApiOnline(true)
-    } catch (error) {
-      console.error("Failed to sync offline changes:", error)
-      throw error
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [hasPendingChanges])
+    setHasPendingChanges(false)
+  }, [])
 
   const discardOfflineChanges = useCallback(async () => {
-    if (!hasPendingChanges) return
-    
-    setIsSyncing(true)
-    try {
-      // Fetch fresh data from server
-      const apiMonths = await api.getMonths()
-      const validMonths = apiMonths.filter((m) => m && m.monthKey)
-      
-      // Overwrite localStorage with server data
-      saveAllMonths(validMonths)
-      setAllMonths(validMonths)
-      serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
-      
-      // Clear pending changes flag
-      setPendingOfflineChanges(false)
-      setHasPendingChanges(false)
-      setIsApiOnline(true)
-    } catch (error) {
-      console.error("Failed to discard offline changes:", error)
-      throw error
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [hasPendingChanges])
+    setHasPendingChanges(false)
+  }, [])
 
   const ensureMonth = useCallback(
     (monthKey: string): MonthData[] => {
@@ -497,13 +317,7 @@ export function useFinance() {
     }
 
     try {
-      const isOnline = await checkApiStatus()
-      if (!isOnline) {
-        throw new NetworkError()
-      }
-
       await api.deleteMonth(monthKey)
-      setIsApiOnline(true)
 
       const remaining = allMonths.filter((m) => m.monthKey !== monthKey)
       const nextKey = monthKey === currentMonthKey
@@ -520,10 +334,7 @@ export function useFinance() {
         console.error("Rate limit ao deletar mes:", error)
         return false
       }
-      if (error instanceof NetworkError) {
-        setIsApiOnline(false)
-        throw error
-      }
+      if (error instanceof NetworkError) throw error
       throw error
     }
   }, [allMonths, applyLocalUpdate, currentMonthKey, getNextAvailableMonthKey])
@@ -590,25 +401,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.createBudget(currentMonthKey, budget)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.createBudget(currentMonthKey, budget)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao criar budget:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to create budget:', error)
       }
@@ -628,25 +429,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.updateBudget(currentMonthKey, budget.id, budget)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.updateBudget(currentMonthKey, budget.id, budget)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao atualizar budget:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to update budget:', error)
       }
@@ -666,25 +457,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.deleteBudget(currentMonthKey, budgetId)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.deleteBudget(currentMonthKey, budgetId)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao remover budget:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to delete budget:', error)
       }
@@ -706,25 +487,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.createInvestment(currentMonthKey, investment)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.createInvestment(currentMonthKey, investment)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao criar investimento:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to create investment:', error)
       }
@@ -744,25 +515,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.updateInvestment(currentMonthKey, investment.id, investment)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.updateInvestment(currentMonthKey, investment.id, investment)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao atualizar investimento:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to update investment:', error)
       }
@@ -782,25 +543,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.deleteInvestment(currentMonthKey, investmentId)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.deleteInvestment(currentMonthKey, investmentId)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao remover investimento:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to delete investment:', error)
       }
@@ -822,25 +573,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.createGoal(currentMonthKey, goal)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.createGoal(currentMonthKey, goal)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao criar meta:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to create goal:', error)
       }
@@ -860,25 +601,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.updateGoal(currentMonthKey, goal.id, goal)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.updateGoal(currentMonthKey, goal.id, goal)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao atualizar meta:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to update goal:', error)
       }
@@ -898,25 +629,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.deleteGoal(currentMonthKey, goalId)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.deleteGoal(currentMonthKey, goalId)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao remover meta:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to delete goal:', error)
       }
@@ -938,25 +659,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.createSubscription(currentMonthKey, subscription)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.createSubscription(currentMonthKey, subscription)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao criar assinatura:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to create subscription:', error)
       }
@@ -976,25 +687,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.updateSubscription(currentMonthKey, subscription.id, subscription)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.updateSubscription(currentMonthKey, subscription.id, subscription)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao atualizar assinatura:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to update subscription:', error)
       }
@@ -1014,25 +715,15 @@ export function useFinance() {
       
       // Call specific API endpoint
       try {
-        const isOnline = await checkApiStatus()
-        if (isOnline) {
-          await api.deleteSubscription(currentMonthKey, subscriptionId)
-          setIsApiOnline(true)
-          applyLocalUpdate(updated)
-        } else {
-          applyLocalUpdate(updated)
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-        }
+        await api.deleteSubscription(currentMonthKey, subscriptionId)
+        applyLocalUpdate(updated)
       } catch (error) {
         if (error instanceof ApiError && error.status === 429) {
           console.error("Rate limit ao remover assinatura:", error)
           return
         }
         if (error instanceof NetworkError) {
-          setPendingOfflineChanges(true)
-          setHasPendingChanges(true)
-          applyLocalUpdate(updated)
+          return
         }
         console.error('Failed to delete subscription:', error)
       }
@@ -1046,9 +737,8 @@ export function useFinance() {
     currentMonthKey,
     setCurrentMonthKey,
     currentMonth,
-    isApiOnline,
     isSyncing,
-    hasPendingChanges,
+    hasPendingChanges: false,
     syncOfflineChanges,
     discardOfflineChanges,
     addCategory,
