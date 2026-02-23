@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { Bill, Category, MonthData } from "@/lib/types"
-import { createId, getCurrentMonthKey, getDefaultData } from "@/lib/types"
+import { createId, getCurrentMonthKey } from "@/lib/types"
 import { api, ApiError, NetworkError } from "@/lib/api"
 
 async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, modifiedMonthKey?: string): Promise<void> {
@@ -81,13 +81,13 @@ export function useFinance() {
         serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
 
         if (validMonths.length === 0) {
-          setAllMonths([getDefaultData()])
+          setAllMonths([])
         } else {
           setAllMonths(validMonths)
         }
         setHasPendingChanges(false)
       } catch {
-        setAllMonths([getDefaultData()])
+        setAllMonths([])
         setHasPendingChanges(false)
       } finally {
         setIsSyncing(false)
