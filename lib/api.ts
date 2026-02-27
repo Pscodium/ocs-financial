@@ -4,7 +4,7 @@ import type { MonthData } from "./types"
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
 const CLIENT_ID = "ocs-financial"
-const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}/callback` : "http://localhost:3001/callback"
+const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
 
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
