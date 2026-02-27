@@ -9,7 +9,7 @@ const MONTHS_CACHE_TTL_MS = 2000
 
 function getProviderRedirectUri(provider: OAuthProvider): string {
   const authBaseUrl = API_AUTH_URL.replace(/\/+$/, "")
-  return `${authBaseUrl}/auth/${provider}/callback`
+  return `${authBaseUrl}/auth/${provider}/callback?redirect_uri=${encodeURIComponent(REDIRECT_URI)}`
 }
 
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
