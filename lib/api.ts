@@ -7,6 +7,11 @@ const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
 
+function getProviderRedirectUri(provider: OAuthProvider): string {
+  const authBaseUrl = API_AUTH_URL.replace(/\/+$/, "")
+  return `${authBaseUrl}/auth/${provider}/callback`
+}
+
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
 let monthsCache: MonthData[] | null = null
 let monthsCacheUpdatedAt = 0
@@ -305,6 +310,7 @@ export const api = {
     try {
       const pkce = await generatePKCE()
       const state = generateRandomString(16)
+      const providerRedirectUri = getProviderRedirectUri(provider)
 
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("pkce_verifier", pkce.verifier)
@@ -313,7 +319,7 @@ export const api = {
 
       const query = new URLSearchParams({
         client_id: CLIENT_ID,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: providerRedirectUri,
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
         state,
