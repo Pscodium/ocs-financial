@@ -8,6 +8,9 @@ COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
+ARG NEXT_PUBLIC_REDIRECT_URI
+ENV NEXT_PUBLIC_REDIRECT_URI=${NEXT_PUBLIC_REDIRECT_URI}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm build
