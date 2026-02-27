@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
-import { api, type User, ApiError, NetworkError } from "@/lib/api"
+import { api, type User, type OAuthProvider, ApiError, NetworkError } from "@/lib/api"
 import { getUserPlanIdentifier } from "@/lib/feature-flags"
 import { RateLimitModal } from "@/components/rate-limit-modal"
 
@@ -10,6 +10,8 @@ interface AuthContextType {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
+  loginWithProvider: (provider: OAuthProvider) => Promise<void>
+  handleOAuthCallback: (code: string, state?: string) => Promise<void>
   register: (email: string, password: string, fullName: string) => Promise<void>
   logout: () => void
   error: string | null
@@ -152,6 +154,65 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  const loginWithProvider = useCallback(async (provider: OAuthProvider) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      await api.loginWithProvider(provider)
+    } catch (err) {
+      if (err instanceof NetworkError) {
+        setError("Não foi possível conectar ao servidor")
+      } else {
+        setError("Erro ao iniciar login com provedor")
+      }
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  const handleOAuthCallback = useCallback(async (code: string, state?: string) => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      if (typeof localStorage === "undefined") {
+        throw new ApiError(400, "OAuth state inválido")
+      }
+
+      const expectedState = localStorage.getItem("oauth_state")
+
+      if (!state || !expectedState || state !== expectedState) {
+        throw new ApiError(400, "OAuth state inválido")
+      }
+
+      localStorage.removeItem("oauth_state")
+
+      await api.exchangeCode(code)
+      const userData = await api.getCurrentUser()
+
+      if (userData) {
+        localStorage.setItem("user_data", JSON.stringify(userData))
+        setUser(userData)
+      }
+    } catch (err) {
+      if (typeof localStorage !== "undefined") {
+        localStorage.removeItem("oauth_state")
+      }
+
+      if (err instanceof ApiError) {
+        setError("Não foi possível concluir login com provedor")
+      } else if (err instanceof NetworkError) {
+        setError("Não foi possível conectar ao servidor")
+      } else {
+        setError("Erro ao concluir login")
+      }
+      throw err
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
   const register = useCallback(async (email: string, password: string, fullName: string) => {
     setIsLoading(true)
     setError(null)
@@ -193,6 +254,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginWithProvider,
+        handleOAuthCallback,
         register,
         logout,
         error,

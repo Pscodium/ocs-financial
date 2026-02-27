@@ -112,6 +112,8 @@ export interface LoginResponse {
   state?: string
 }
 
+export type OAuthProvider = "google" | "github" | "microsoft"
+
 export interface RegisterPayload {
   email: string
   password: string
@@ -295,6 +297,32 @@ export const api = {
       if (error instanceof ApiError) {
         throw error
       }
+      throw new NetworkError()
+    }
+  },
+
+  async loginWithProvider(provider: OAuthProvider): Promise<void> {
+    try {
+      const pkce = await generatePKCE()
+      const state = generateRandomString(16)
+
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("pkce_verifier", pkce.verifier)
+        localStorage.setItem("oauth_state", state)
+      }
+
+      const query = new URLSearchParams({
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT_URI,
+        code_challenge: pkce.challenge,
+        code_challenge_method: "S256",
+        state,
+      })
+
+      if (typeof window !== "undefined") {
+        window.location.assign(`${API_AUTH_URL}/auth/${provider}?${query.toString()}`)
+      }
+    } catch (error) {
       throw new NetworkError()
     }
   },
