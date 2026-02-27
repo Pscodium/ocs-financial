@@ -3,7 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/use-auth'
-import { IOSBounceGuard } from '@/components/ios-bounce-guard'
+import { PWARegister } from '@/components/pwa-register'
+import { IOSBounceGuard } from '@/components/ios-bounce-guard' 
 
 import './globals.css'
 
@@ -13,8 +14,15 @@ const _jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbra
 export const metadata: Metadata = {
   title: 'Gestor Financeiro',
   description: 'Gerencie suas contas mensais de forma simples e organizada',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'Gestor Financeiro',
   icons: {
-    icon: '/favicon.ico', // ou '/icon.png'
+    icon: [
+      { url: '/favicon.ico' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
   },
 }
 
@@ -33,6 +41,7 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={`${_inter.variable} ${_jetbrains.variable} font-sans antialiased`}>
         <IOSBounceGuard />
+        <PWARegister />
         <AuthProvider>
           {children}
         </AuthProvider>
@@ -41,3 +50,4 @@ export default function RootLayout({
     </html>
   )
 }
+
