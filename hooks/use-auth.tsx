@@ -11,7 +11,13 @@ interface AuthContextType {
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
   loginWithProvider: (provider: OAuthProvider) => Promise<void>
-  handleOAuthCallback: (code: string, state?: string) => Promise<void>
+  handleOAuthCallback: (payload: {
+    code?: string
+    state?: string
+    accessToken?: string
+    refreshToken?: string
+    expiresIn?: number
+  }) => Promise<void>
   register: (email: string, password: string, fullName: string) => Promise<void>
   logout: () => void
   error: string | null
@@ -176,7 +182,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const handleOAuthCallback = useCallback(async (code: string, state?: string) => {
+  const handleOAuthCallback = useCallback(async (payload: {
+    code?: string
+    state?: string
+    accessToken?: string
+    refreshToken?: string
+    expiresIn?: number
+  }) => {
     setIsLoading(true)
     setError(null)
 
@@ -186,14 +198,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const expectedState = localStorage.getItem("oauth_state")
+      const callbackState = payload.state
 
-      if (expectedState && state && state !== expectedState) {
+      if (expectedState && callbackState && callbackState !== expectedState) {
         throw new ApiError(400, "OAuth state inválido")
       }
 
       localStorage.removeItem("oauth_state")
 
-      await api.exchangeCode(code)
+      if (payload.accessToken) {
+        localStorage.setItem("access_token", payload.accessToken)
+        if (payload.refreshToken) {
+          localStorage.setItem("refresh_token", payload.refreshToken)
+        }
+        if (payload.expiresIn && Number.isFinite(payload.expiresIn)) {
+          localStorage.setItem("token_expires_at", String(Date.now() + payload.expiresIn * 1000))
+        }
+        localStorage.removeItem("pkce_verifier")
+      } else if (payload.code) {
+        await api.exchangeCode(payload.code)
+      } else {
+        throw new ApiError(400, "Callback OAuth sem code/token")
+      }
+
       const userData = await api.getCurrentUser()
 
       if (userData) {
