@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 import type { OAuthProvider } from "@/lib/api"
@@ -67,8 +67,14 @@ export default function LoginPage() {
   const [localError, setLocalError] = useState<string | null>(null)
   const [registerSuccess, setRegisterSuccess] = useState<string | null>(null)
   const [providerLoading, setProviderLoading] = useState<OAuthProvider | null>(null)
-  const { login, loginWithProvider, register, isLoading, error } = useAuth()
+  const { login, loginWithProvider, register, isLoading, isAuthenticated, error } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/")
+    }
+  }, [isAuthenticated, router])
 
   const checks = passwordChecks.map((check) => ({
     ...check,

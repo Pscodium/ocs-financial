@@ -42,36 +42,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let intervalId: ReturnType<typeof setInterval> | null = null
 
-    // Check for existing token on mount
-    const token = typeof localStorage !== 'undefined' ? localStorage.getItem("access_token") : null
-    const userData = typeof localStorage !== 'undefined' ? localStorage.getItem("user_data") : null
-    
-    if (token && userData) {
-      try {
-        setUser(JSON.parse(userData))
-      } catch {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem("access_token")
-          localStorage.removeItem("refresh_token")
-          localStorage.removeItem("user_data")
-        }
-      }
-    } else if (token) {
-      // If we have token but no user data, fetch it
-      api.getCurrentUser().then(userData => {
-        if (userData) {
-          setUser(userData)
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem("user_data", JSON.stringify(userData))
+    const bootstrapAuth = async () => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : null
+      const userData = typeof localStorage !== "undefined" ? localStorage.getItem("user_data") : null
+
+      if (token && userData) {
+        try {
+          setUser(JSON.parse(userData))
+          return
+        } catch {
+          if (typeof localStorage !== "undefined") {
+            localStorage.removeItem("access_token")
+            localStorage.removeItem("refresh_token")
+            localStorage.removeItem("user_data")
           }
         }
-      }).catch(() => {
-        // Token is invalid, clear it
-        if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem("access_token")
-          localStorage.removeItem("refresh_token")
+      }
+
+      if (token) {
+        try {
+          const currentUser = await api.getCurrentUser()
+          if (currentUser) {
+            setUser(currentUser)
+            if (typeof localStorage !== "undefined") {
+              localStorage.setItem("user_data", JSON.stringify(currentUser))
+            }
+          }
+        } catch {
+          if (typeof localStorage !== "undefined") {
+            localStorage.removeItem("access_token")
+            localStorage.removeItem("refresh_token")
+          }
         }
-      })
+      }
     }
 
     intervalId = setInterval(() => {
@@ -97,7 +100,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
     }, 5 * 60 * 1000)
 
-    setIsLoading(false)
+    bootstrapAuth().finally(() => {
+      setIsLoading(false)
+    })
 
     return () => {
       if (intervalId) {
@@ -182,7 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const expectedState = localStorage.getItem("oauth_state")
 
-      if (!state || !expectedState || state !== expectedState) {
+      if (expectedState && state && state !== expectedState) {
         throw new ApiError(400, "OAuth state inválido")
       }
 
