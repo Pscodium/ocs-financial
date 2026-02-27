@@ -6,6 +6,17 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+html.ios-bounce-guard,
+html.ios-bounce-guard body {
+  overscroll-behavior-x: none;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

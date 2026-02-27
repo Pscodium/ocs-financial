@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/use-auth'
+import { IOSBounceGuard } from '@/components/ios-bounce-guard'
 
 import './globals.css'
 
@@ -31,6 +32,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${_inter.variable} ${_jetbrains.variable} font-sans antialiased`}>
+        <IOSBounceGuard />
         <AuthProvider>
           {children}
         </AuthProvider>
