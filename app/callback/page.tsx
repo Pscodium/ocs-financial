@@ -1,17 +1,17 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/use-auth"
 
 export default function OAuthCallbackPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const { handleOAuthCallback } = useAuth()
 
   useEffect(() => {
-    const code = searchParams.get("code")
-    const state = searchParams.get("state")
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get("code")
+    const state = params.get("state")
 
     if (!code) {
       router.replace("/login")
@@ -25,7 +25,7 @@ export default function OAuthCallbackPage() {
       .catch(() => {
         router.replace("/login")
       })
-  }, [handleOAuthCallback, router, searchParams])
+  }, [handleOAuthCallback, router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
