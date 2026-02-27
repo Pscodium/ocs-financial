@@ -310,7 +310,7 @@ export const api = {
     try {
       const pkce = await generatePKCE()
       const state = generateRandomString(16)
-      const providerRedirectUri = getProviderRedirectUri(provider)
+      // const providerRedirectUri = getProviderRedirectUri(provider)
 
       if (typeof localStorage !== "undefined") {
         localStorage.setItem("pkce_verifier", pkce.verifier)
@@ -319,7 +319,7 @@ export const api = {
 
       const query = new URLSearchParams({
         client_id: CLIENT_ID,
-        redirect_uri: providerRedirectUri,
+        redirect_uri: REDIRECT_URI,
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
         state,
