@@ -15,8 +15,6 @@ interface AuthContextType {
     code?: string
     state?: string
     accessToken?: string
-    refreshToken?: string
-    expiresIn?: number
   }) => Promise<void>
   register: (email: string, password: string, fullName: string) => Promise<void>
   logout: () => void
@@ -46,8 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   useEffect(() => {
-    let intervalId: ReturnType<typeof setInterval> | null = null
-
     const bootstrapAuth = async () => {
       const token = typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : null
       const userData = typeof localStorage !== "undefined" ? localStorage.getItem("user_data") : null
@@ -83,38 +79,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    intervalId = setInterval(() => {
-      const currentToken = typeof localStorage !== 'undefined' ? localStorage.getItem("access_token") : null
-      if (!currentToken) {
-        return
-      }
-
-      api.getCurrentUser().then(currentUser => {
-        if (currentUser) {
-          setUser(currentUser)
-          if (typeof localStorage !== 'undefined') {
-            localStorage.setItem("user_data", JSON.stringify(currentUser))
-          }
-        }
-      }).catch(() => {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.removeItem("access_token")
-          localStorage.removeItem("refresh_token")
-          localStorage.removeItem("user_data")
-        }
-        setUser(null)
-      })
-    }, 5 * 60 * 1000)
-
     bootstrapAuth().finally(() => {
       setIsLoading(false)
     })
-
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId)
-      }
-    }
   }, [])
 
   useEffect(() => {
@@ -186,8 +153,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     code?: string
     state?: string
     accessToken?: string
-    refreshToken?: string
-    expiresIn?: number
   }) => {
     setIsLoading(true)
     setError(null)
@@ -207,15 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("oauth_state")
 
       if (payload.accessToken) {
-        localStorage.setItem("access_token", payload.accessToken)
-        if (payload.refreshToken) {
-          localStorage.setItem("refresh_token", payload.refreshToken)
-        }
-        if (payload.expiresIn && Number.isFinite(payload.expiresIn)) {
-          localStorage.setItem("token_expires_at", String(Date.now() + payload.expiresIn * 1000))
-        }
-        localStorage.removeItem("pkce_verifier")
-      } else if (payload.code) {
+        localStorage.setItem("social_access_token", payload.accessToken)
+      }
+
+      if (payload.code) {
         await api.exchangeCode(payload.code)
       } else {
         throw new ApiError(400, "Callback OAuth sem code/token")

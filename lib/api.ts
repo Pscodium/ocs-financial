@@ -90,6 +90,23 @@ function clearTokens() {
   }
 }
 
+function handleUnauthorizedRedirect() {
+  clearTokens()
+
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('user_data')
+    localStorage.removeItem('oauth_state')
+    localStorage.removeItem('social_access_token')
+  }
+
+  if (typeof window !== 'undefined') {
+    const isLoginRoute = window.location.pathname === '/login'
+    if (!isLoginRoute) {
+      window.location.assign('/login')
+    }
+  }
+}
+
 function invalidateMonthsCache() {
   monthsCache = null
   monthsCacheUpdatedAt = 0
@@ -213,17 +230,24 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
               throw new ApiError(429, "Rate limit exceeded")
             }
 
+            if (retryResponse.status === 401) {
+              handleUnauthorizedRedirect()
+              throw new ApiError(401, "Session expired")
+            }
+
             if (!retryResponse.ok) {
               throw new ApiError(retryResponse.status, `API Error: ${retryResponse.statusText}`)
             }
             return retryResponse
           }
         } catch (refreshError) {
-          // Refresh failed, clear tokens and throw
-          clearTokens()
+          // Refresh failed, clear tokens, redirect to login and throw
+          handleUnauthorizedRedirect()
           throw new ApiError(401, "Session expired")
         }
       }
+
+      handleUnauthorizedRedirect()
       throw new ApiError(401, "Unauthorized")
     }
 

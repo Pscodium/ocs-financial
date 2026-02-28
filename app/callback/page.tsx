@@ -21,20 +21,8 @@ export default function OAuthCallbackPage() {
       hashParams.get("access_token") ??
       hashParams.get("accessToken") ??
       undefined
-    const refreshToken =
-      searchParams.get("refresh_token") ??
-      searchParams.get("refreshToken") ??
-      hashParams.get("refresh_token") ??
-      hashParams.get("refreshToken") ??
-      undefined
-    const expiresInRaw =
-      searchParams.get("expires_in") ??
-      searchParams.get("expiresIn") ??
-      hashParams.get("expires_in") ??
-      hashParams.get("expiresIn")
-    const expiresIn = expiresInRaw ? Number(expiresInRaw) : undefined
 
-    if (!code && !accessToken) {
+    if (!code) {
       router.replace("/login")
       return
     }
@@ -43,8 +31,6 @@ export default function OAuthCallbackPage() {
       code,
       state,
       accessToken,
-      refreshToken,
-      expiresIn,
     })
       .then(() => {
         router.replace("/")
