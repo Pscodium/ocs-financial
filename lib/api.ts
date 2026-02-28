@@ -87,6 +87,7 @@ function clearTokens() {
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('token_expires_at')
     localStorage.removeItem('pkce_verifier')
+    localStorage.removeItem('social_access_token')
   }
 }
 
@@ -96,7 +97,6 @@ function handleUnauthorizedRedirect() {
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('user_data')
     localStorage.removeItem('oauth_state')
-    localStorage.removeItem('social_access_token')
   }
 
   if (typeof window !== 'undefined') {
