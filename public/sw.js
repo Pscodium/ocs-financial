@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ocs-financial-v1'
+const CACHE_NAME = 'ocs-financial-v2'
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -29,8 +29,20 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const request = event.request
+  const url = new URL(request.url)
 
   if (request.method !== 'GET') {
+    return
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return
+  }
+
+  const isSameOrigin = url.origin === self.location.origin
+  const isApiRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')
+
+  if (!isSameOrigin || isApiRequest) {
     return
   }
 
@@ -49,8 +61,10 @@ self.addEventListener('fetch', event => {
 
       return fetch(request)
         .then(response => {
-          const responseToCache = response.clone()
-          caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache))
+          if (response.ok && response.type === 'basic') {
+            const responseToCache = response.clone()
+            caches.open(CACHE_NAME).then(cache => cache.put(request, responseToCache))
+          }
           return response
         })
         .catch(() => cached)
