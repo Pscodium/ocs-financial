@@ -5,6 +5,24 @@ import { api, type User, type OAuthProvider, ApiError, NetworkError } from "@/li
 import { getUserPlanIdentifier } from "@/lib/feature-flags"
 import { RateLimitModal } from "@/components/rate-limit-modal"
 
+const OAUTH_TRANSIENT_TTL_MS = 10 * 60 * 1000
+
+function getTransientStorage(): Storage | null {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  try {
+    return window.sessionStorage
+  } catch {
+    try {
+      return window.localStorage
+    } catch {
+      return null
+    }
+  }
+}
+
 interface AuthContextType {
   user: User | null
   isLoading: boolean
@@ -44,38 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const bootstrapAuth = async () => {
-      const token = typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : null
-      const userData = typeof localStorage !== "undefined" ? localStorage.getItem("user_data") : null
-
-      if (token && userData) {
-        try {
-          setUser(JSON.parse(userData))
-          return
-        } catch {
-          if (typeof localStorage !== "undefined") {
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("refresh_token")
-            localStorage.removeItem("user_data")
-          }
+      try {
+        const currentUser = await api.getCurrentUser()
+        if (currentUser) {
+          setUser(currentUser)
         }
-      }
-
-      if (token) {
-        try {
-          const currentUser = await api.getCurrentUser()
-          if (currentUser) {
-            setUser(currentUser)
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("user_data", JSON.stringify(currentUser))
-            }
-          }
-        } catch {
-          if (typeof localStorage !== "undefined") {
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("refresh_token")
-          }
-        }
-      }
+      } catch {}
     }
 
     bootstrapAuth().finally(() => {
@@ -112,9 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await api.getCurrentUser()
       
       if (userData) {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem("user_data", JSON.stringify(userData))
-        }
         setUser(userData)
       }
     } catch (err) {
@@ -160,14 +149,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new ApiError(400, "OAuth state inválido")
       }
 
-      const expectedState = localStorage.getItem("oauth_state")
+      const transientStorage = getTransientStorage()
+      const expectedState = transientStorage?.getItem("oauth_state") ?? localStorage.getItem("oauth_state")
+      const createdAtRaw =
+        transientStorage?.getItem("oauth_transient_created_at") ?? localStorage.getItem("oauth_transient_created_at")
       const callbackState = payload.state
+      const createdAt = createdAtRaw ? Number(createdAtRaw) : NaN
 
-      if (expectedState && callbackState && callbackState !== expectedState) {
-        throw new ApiError(400, "OAuth state inválido")
+      if (expectedState && callbackState) {
+        if (!Number.isFinite(createdAt) || Date.now() - createdAt > OAUTH_TRANSIENT_TTL_MS) {
+          throw new ApiError(400, "OAuth state expirado")
+        }
+
+        if (callbackState !== expectedState) {
+          throw new ApiError(400, "OAuth state inválido")
+        }
       }
 
+      transientStorage?.removeItem("oauth_state")
+      transientStorage?.removeItem("oauth_transient_created_at")
       localStorage.removeItem("oauth_state")
+      localStorage.removeItem("oauth_transient_created_at")
 
       if (payload.code) {
         await api.exchangeCode(payload.code)
@@ -178,12 +180,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await api.getCurrentUser()
 
       if (userData) {
-        localStorage.setItem("user_data", JSON.stringify(userData))
         setUser(userData)
       }
     } catch (err) {
+      const transientStorage = getTransientStorage()
+      transientStorage?.removeItem("oauth_state")
+      transientStorage?.removeItem("oauth_transient_created_at")
+
       if (typeof localStorage !== "undefined") {
         localStorage.removeItem("oauth_state")
+        localStorage.removeItem("oauth_transient_created_at")
       }
 
       if (err instanceof ApiError) {
@@ -226,9 +232,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     await api.logout()
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem("user_data")
-    }
     setUser(null)
     setError(null)
   }, [])

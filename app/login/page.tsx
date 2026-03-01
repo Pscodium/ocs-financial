@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Github } from "lucide-react"
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
+const OAUTH_TRANSIENT_TTL_MS = 10 * 60 * 1000
+const OAUTH_TRANSIENT_CREATED_AT_KEY = "oauth_transient_created_at"
 
 const passwordChecks = [
   { key: "length", label: "Pelo menos 8 caracteres", test: (value: string) => value.length >= 8 },
@@ -69,6 +71,48 @@ export default function LoginPage() {
   const [providerLoading, setProviderLoading] = useState<OAuthProvider | null>(null)
   const { login, loginWithProvider, register, isLoading, isAuthenticated, error } = useAuth()
   const router = useRouter()
+
+  useEffect(() => {
+    const cleanupExpiredOAuthTransient = () => {
+      if (typeof window === "undefined") {
+        return
+      }
+
+      const storages: Storage[] = []
+
+      try {
+        storages.push(window.sessionStorage)
+      } catch {}
+
+      try {
+        storages.push(window.localStorage)
+      } catch {}
+
+      storages.forEach((storage) => {
+        const createdAtRaw = storage.getItem(OAUTH_TRANSIENT_CREATED_AT_KEY)
+        const createdAt = createdAtRaw ? Number(createdAtRaw) : NaN
+
+        if (!createdAtRaw) {
+          return
+        }
+
+        const isExpired = !Number.isFinite(createdAt) || Date.now() - createdAt > OAUTH_TRANSIENT_TTL_MS
+
+        if (isExpired) {
+          storage.removeItem("oauth_state")
+          storage.removeItem("pkce_verifier")
+          storage.removeItem(OAUTH_TRANSIENT_CREATED_AT_KEY)
+        }
+      })
+    }
+
+    cleanupExpiredOAuthTransient()
+    const intervalId = window.setInterval(cleanupExpiredOAuthTransient, 15_000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [])
 
   useEffect(() => {
     if (isAuthenticated) {

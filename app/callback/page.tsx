@@ -10,11 +10,8 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
-    const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : window.location.hash
-    const hashParams = new URLSearchParams(hash)
-
-    const code = searchParams.get("code") ?? hashParams.get("code") ?? undefined
-    const state = searchParams.get("state") ?? hashParams.get("state") ?? undefined
+    const code = searchParams.get("code") ?? undefined
+    const state = searchParams.get("state") ?? undefined
 
     if (!code) {
       router.replace("/login")
