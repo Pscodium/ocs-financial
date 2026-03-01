@@ -14,7 +14,6 @@ interface AuthContextType {
   handleOAuthCallback: (payload: {
     code?: string
     state?: string
-    accessToken?: string
   }) => Promise<void>
   register: (email: string, password: string, fullName: string) => Promise<void>
   logout: () => void
@@ -152,7 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleOAuthCallback = useCallback(async (payload: {
     code?: string
     state?: string
-    accessToken?: string
   }) => {
     setIsLoading(true)
     setError(null)
@@ -171,14 +169,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       localStorage.removeItem("oauth_state")
 
-      if (payload.accessToken) {
-        localStorage.setItem("social_access_token", payload.accessToken)
-      }
-
       if (payload.code) {
         await api.exchangeCode(payload.code)
       } else {
-        throw new ApiError(400, "Callback OAuth sem code/token")
+        throw new ApiError(400, "Callback OAuth sem code")
       }
 
       const userData = await api.getCurrentUser()
