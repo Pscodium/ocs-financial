@@ -68,14 +68,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return words.length > 0 ? words.join(" ") : "seu plano atual"
   }, [])
 
-  const resolveAuthenticatedUser = useCallback(async () => {
-    for (let attempt = 0; attempt <= SESSION_PROPAGATION_RETRY_COUNT; attempt += 1) {
+  const resolveAuthenticatedUser = useCallback(async (retryCount: number = 0) => {
+    for (let attempt = 0; attempt <= retryCount; attempt += 1) {
       const currentUser = await api.getCurrentUser()
       if (currentUser) {
         return currentUser
       }
 
-      if (attempt < SESSION_PROPAGATION_RETRY_COUNT) {
+      if (attempt < retryCount) {
         await sleep(SESSION_PROPAGATION_RETRY_DELAY_MS)
       }
     }
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const bootstrapAuth = async () => {
       try {
-        const currentUser = await resolveAuthenticatedUser()
+        const currentUser = await resolveAuthenticatedUser(0)
         if (currentUser) {
           setUser(currentUser)
         }
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await api.login(email, password)
       
       // Fetch user data after session propagation
-      const userData = await resolveAuthenticatedUser()
+      const userData = await resolveAuthenticatedUser(SESSION_PROPAGATION_RETRY_COUNT)
       
       if (userData) {
         setUser(userData)
@@ -202,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new ApiError(400, "Callback OAuth sem code")
       }
 
-      const userData = await resolveAuthenticatedUser()
+      const userData = await resolveAuthenticatedUser(SESSION_PROPAGATION_RETRY_COUNT)
 
       if (userData) {
         setUser(userData)

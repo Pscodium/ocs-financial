@@ -6,6 +6,7 @@ const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
 const OAUTH_TRANSIENT_CREATED_AT_KEY = "oauth_transient_created_at"
+const REFRESH_FAILURE_COOLDOWN_MS = 5000
 
 function getProviderRedirectUri(provider: OAuthProvider): string {
   const authBaseUrl = API_AUTH_URL.replace(/\/+$/, "")
@@ -16,6 +17,8 @@ let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
 let monthsCache: MonthData[] | null = null
 let monthsCacheUpdatedAt = 0
 let inMemoryAccessToken: string | null = null
+let inFlightRefreshRequest: Promise<TokenResponse> | null = null
+let lastRefreshFailureAt = 0
 
 function getTransientStorage(): Storage | null {
   if (typeof window === "undefined") {
@@ -218,7 +221,40 @@ export class NetworkError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
+interface AuthRequestOptions extends RequestInit {
+  skipRefreshOn401?: boolean
+  suppressUnauthorizedRedirect?: boolean
+}
+
+async function refreshTokenWithLock() {
+  if (inFlightRefreshRequest) {
+    return inFlightRefreshRequest
+  }
+
+  if (Date.now() - lastRefreshFailureAt < REFRESH_FAILURE_COOLDOWN_MS) {
+    throw new ApiError(401, "Session refresh temporarily blocked")
+  }
+
+  const request = api.refreshToken()
+  inFlightRefreshRequest = request
+
+  try {
+    return await request
+  } catch (error) {
+    lastRefreshFailureAt = Date.now()
+    throw error
+  } finally {
+    inFlightRefreshRequest = null
+  }
+}
+
+async function fetchWithAuth(url: string, options: AuthRequestOptions = {}) {
+  const {
+    skipRefreshOn401 = false,
+    suppressUnauthorizedRedirect = false,
+    ...requestOptions
+  } = options
+
   let token = getAccessToken()
   
   const headers: Record<string, string> = {
@@ -226,17 +262,17 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   // Merge existing headers
-  if (options.headers) {
-    if (options.headers instanceof Headers) {
-      options.headers.forEach((value, key) => {
+  if (requestOptions.headers) {
+    if (requestOptions.headers instanceof Headers) {
+      requestOptions.headers.forEach((value, key) => {
         headers[key] = value
       })
-    } else if (Array.isArray(options.headers)) {
-      options.headers.forEach(([key, value]) => {
+    } else if (Array.isArray(requestOptions.headers)) {
+      requestOptions.headers.forEach(([key, value]) => {
         headers[key] = value
       })
     } else {
-      Object.assign(headers, options.headers)
+      Object.assign(headers, requestOptions.headers)
     }
   }
 
@@ -261,7 +297,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
   try {
     const response = await fetch(`${API_BASE_URL}${url}`, {
-      ...options,
+      ...requestOptions,
       headers,
       credentials: "include",
     })
@@ -273,8 +309,15 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
     // If unauthorized, try to refresh token
     if (response.status === 401) {
+      if (skipRefreshOn401) {
+        if (!suppressUnauthorizedRedirect) {
+          handleUnauthorizedRedirect()
+        }
+        throw new ApiError(401, "Unauthorized")
+      }
+
       try {
-        await api.refreshToken()
+        await refreshTokenWithLock()
 
         token = getAccessToken()
         if (token) {
@@ -284,7 +327,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
         }
 
         const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
-          ...options,
+          ...requestOptions,
           headers,
           credentials: "include",
         })
@@ -295,7 +338,9 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
         }
 
         if (retryResponse.status === 401) {
-          handleUnauthorizedRedirect()
+          if (!suppressUnauthorizedRedirect) {
+            handleUnauthorizedRedirect()
+          }
           throw new ApiError(401, "Session expired")
         }
 
@@ -305,7 +350,9 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
         return retryResponse
       } catch {
-        handleUnauthorizedRedirect()
+        if (!suppressUnauthorizedRedirect) {
+          handleUnauthorizedRedirect()
+        }
         throw new ApiError(401, "Session expired")
       }
     }
@@ -474,6 +521,7 @@ export const api = {
 
       const tokens = await response.json() as TokenResponse
       storeTokens(tokens)
+      lastRefreshFailureAt = 0
 
       return tokens
     } catch (error) {
@@ -506,7 +554,10 @@ export const api = {
 
   async getCurrentUser(): Promise<User | null> {
     try {
-      const response = await fetchWithAuth('/check/auth')
+      const response = await fetchWithAuth('/check/auth', {
+        skipRefreshOn401: true,
+        suppressUnauthorizedRedirect: true,
+      })
 
       if (!response.ok) {
         return null
