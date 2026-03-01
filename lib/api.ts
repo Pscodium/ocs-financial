@@ -87,7 +87,6 @@ function clearTokens() {
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('token_expires_at')
     localStorage.removeItem('pkce_verifier')
-    localStorage.removeItem('social_access_token')
   }
 }
 

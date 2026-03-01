@@ -15,12 +15,6 @@ export default function OAuthCallbackPage() {
 
     const code = searchParams.get("code") ?? hashParams.get("code") ?? undefined
     const state = searchParams.get("state") ?? hashParams.get("state") ?? undefined
-    const accessToken =
-      searchParams.get("access_token") ??
-      searchParams.get("accessToken") ??
-      hashParams.get("access_token") ??
-      hashParams.get("accessToken") ??
-      undefined
 
     if (!code) {
       router.replace("/login")
@@ -30,7 +24,6 @@ export default function OAuthCallbackPage() {
     handleOAuthCallback({
       code,
       state,
-      accessToken,
     })
       .then(() => {
         router.replace("/")
