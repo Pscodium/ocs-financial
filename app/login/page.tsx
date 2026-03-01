@@ -132,7 +132,6 @@ export default function LoginPage() {
     setLocalError(null)
     try {
       await login(loginEmail, loginPassword)
-      router.push("/")
     } catch {
       // Error is handled by useAuth
     }

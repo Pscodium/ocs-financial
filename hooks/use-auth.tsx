@@ -6,6 +6,14 @@ import { getUserPlanIdentifier } from "@/lib/feature-flags"
 import { RateLimitModal } from "@/components/rate-limit-modal"
 
 const OAUTH_TRANSIENT_TTL_MS = 10 * 60 * 1000
+const SESSION_PROPAGATION_RETRY_COUNT = 3
+const SESSION_PROPAGATION_RETRY_DELAY_MS = 250
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
 
 function getTransientStorage(): Storage | null {
   if (typeof window === "undefined") {
@@ -60,10 +68,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return words.length > 0 ? words.join(" ") : "seu plano atual"
   }, [])
 
+  const resolveAuthenticatedUser = useCallback(async () => {
+    for (let attempt = 0; attempt <= SESSION_PROPAGATION_RETRY_COUNT; attempt += 1) {
+      const currentUser = await api.getCurrentUser()
+      if (currentUser) {
+        return currentUser
+      }
+
+      if (attempt < SESSION_PROPAGATION_RETRY_COUNT) {
+        await sleep(SESSION_PROPAGATION_RETRY_DELAY_MS)
+      }
+    }
+
+    return null
+  }, [])
+
   useEffect(() => {
     const bootstrapAuth = async () => {
       try {
-        const currentUser = await api.getCurrentUser()
+        const currentUser = await resolveAuthenticatedUser()
         if (currentUser) {
           setUser(currentUser)
         }
@@ -73,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     bootstrapAuth().finally(() => {
       setIsLoading(false)
     })
-  }, [])
+  }, [resolveAuthenticatedUser])
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -100,11 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Login returns tokens
       await api.login(email, password)
       
-      // Fetch user data
-      const userData = await api.getCurrentUser()
+      // Fetch user data after session propagation
+      const userData = await resolveAuthenticatedUser()
       
       if (userData) {
         setUser(userData)
+      } else {
+        throw new ApiError(401, "Sessão não confirmada após login")
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -118,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [resolveAuthenticatedUser])
 
   const loginWithProvider = useCallback(async (provider: OAuthProvider) => {
     setIsLoading(true)
@@ -177,10 +202,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new ApiError(400, "Callback OAuth sem code")
       }
 
-      const userData = await api.getCurrentUser()
+      const userData = await resolveAuthenticatedUser()
 
       if (userData) {
         setUser(userData)
+      } else {
+        throw new ApiError(401, "Sessão não confirmada após callback OAuth")
       }
     } catch (err) {
       const transientStorage = getTransientStorage()
@@ -203,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [resolveAuthenticatedUser])
 
   const register = useCallback(async (email: string, password: string, fullName: string) => {
     setIsLoading(true)
