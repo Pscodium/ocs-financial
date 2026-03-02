@@ -44,36 +44,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const bootstrapAuth = async () => {
-      const token = typeof localStorage !== "undefined" ? localStorage.getItem("access_token") : null
       const userData = typeof localStorage !== "undefined" ? localStorage.getItem("user_data") : null
 
-      if (token && userData) {
+      if (userData) {
         try {
           setUser(JSON.parse(userData))
-          return
         } catch {
           if (typeof localStorage !== "undefined") {
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("refresh_token")
             localStorage.removeItem("user_data")
           }
         }
       }
 
-      if (token) {
-        try {
-          const currentUser = await api.getCurrentUser()
-          if (currentUser) {
-            setUser(currentUser)
-            if (typeof localStorage !== "undefined") {
-              localStorage.setItem("user_data", JSON.stringify(currentUser))
-            }
-          }
-        } catch {
+      try {
+        const currentUser = await api.getCurrentUser()
+        if (currentUser) {
+          setUser(currentUser)
           if (typeof localStorage !== "undefined") {
-            localStorage.removeItem("access_token")
-            localStorage.removeItem("refresh_token")
+            localStorage.setItem("user_data", JSON.stringify(currentUser))
           }
+        } else if (typeof localStorage !== "undefined") {
+          localStorage.removeItem("user_data")
+        }
+      } catch {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem("user_data")
         }
       }
     }
@@ -156,19 +151,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null)
 
     try {
-      if (typeof localStorage === "undefined") {
-        throw new ApiError(400, "OAuth state inválido")
-      }
-
-      const expectedState = localStorage.getItem("oauth_state")
-      const callbackState = payload.state
-
-      if (expectedState && callbackState && callbackState !== expectedState) {
-        throw new ApiError(400, "OAuth state inválido")
-      }
-
-      localStorage.removeItem("oauth_state")
-
       if (payload.code) {
         await api.exchangeCode(payload.code)
       } else {
@@ -178,14 +160,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const userData = await api.getCurrentUser()
 
       if (userData) {
-        localStorage.setItem("user_data", JSON.stringify(userData))
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("user_data", JSON.stringify(userData))
+        }
         setUser(userData)
       }
     } catch (err) {
-      if (typeof localStorage !== "undefined") {
-        localStorage.removeItem("oauth_state")
-      }
-
       if (err instanceof ApiError) {
         setError("Não foi possível concluir login com provedor")
       } else if (err instanceof NetworkError) {

@@ -1,4 +1,3 @@
-import { parse } from "cookie"
 import type { MonthData } from "./types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
@@ -6,11 +5,10 @@ const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3
 const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
-
-function getProviderRedirectUri(provider: OAuthProvider): string {
-  const authBaseUrl = API_AUTH_URL.replace(/\/+$/, "")
-  return `${authBaseUrl}/auth/${provider}/callback?redirect_uri=${encodeURIComponent(REDIRECT_URI)}`
-}
+const PENDING_SOCIAL_PKCE_VERIFIER_KEY = "pending_social_code_verifier"
+const ACCESS_TOKEN_STORAGE_KEY = "access_token"
+const REFRESH_TOKEN_STORAGE_KEY = "refresh_token"
+const FORCE_LOCAL_TOKEN_STORAGE = process.env.NEXT_PUBLIC_USE_LOCAL_TOKENS === "true"
 
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
 let monthsCache: MonthData[] | null = null
@@ -53,50 +51,73 @@ async function generatePKCE() {
 
 // Token Management
 interface TokenResponse {
-  access_token: string
-  refresh_token: string
-  expires_in: number
-  token_type: string
+  access_token?: string
+  refresh_token?: string
+  expires_in?: number
+  token_type?: string
 }
 
-function storeTokens(tokens: TokenResponse) {
-  if (typeof localStorage !== 'undefined') {
-    localStorage.setItem('access_token', tokens.access_token)
-    localStorage.setItem('refresh_token', tokens.refresh_token)
-    localStorage.setItem('token_expires_at', String(Date.now() + tokens.expires_in * 1000))
+function isLocalEnvironment(): boolean {
+  if (typeof window === "undefined") {
+    return false
+  }
+
+  const hostname = window.location.hostname
+  return hostname === "localhost" || hostname === "127.0.0.1"
+}
+
+function shouldUseLocalTokenStorage(): boolean {
+  if (FORCE_LOCAL_TOKEN_STORAGE) {
+    return true
+  }
+
+  return isLocalEnvironment()
+}
+
+function setLocalTokens(tokens: TokenResponse) {
+  if (typeof localStorage === "undefined" || !shouldUseLocalTokenStorage()) {
+    return
+  }
+
+  if (tokens.access_token) {
+    localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, tokens.access_token)
+  }
+
+  if (tokens.refresh_token) {
+    localStorage.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refresh_token)
   }
 }
 
-function getAccessToken(): string | null {
-  if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('access_token')
+function getLocalAccessToken(): string | null {
+  if (typeof localStorage === "undefined" || !shouldUseLocalTokenStorage()) {
+    return null
   }
-  return null
+
+  return localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
 }
 
-function getRefreshToken(): string | null {
-  if (typeof localStorage !== 'undefined') {
-    return localStorage.getItem('refresh_token')
+function getLocalRefreshToken(): string | null {
+  if (typeof localStorage === "undefined" || !shouldUseLocalTokenStorage()) {
+    return null
   }
-  return null
+
+  return localStorage.getItem(REFRESH_TOKEN_STORAGE_KEY)
 }
 
 function clearTokens() {
   if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('token_expires_at')
-    localStorage.removeItem('pkce_verifier')
+    localStorage.removeItem('user_data')
+    localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    localStorage.removeItem(REFRESH_TOKEN_STORAGE_KEY)
+  }
+
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
   }
 }
 
 function handleUnauthorizedRedirect() {
   clearTokens()
-
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('user_data')
-    localStorage.removeItem('oauth_state')
-  }
 
   if (typeof window !== 'undefined') {
     const isLoginRoute = window.location.pathname === '/login'
@@ -159,8 +180,8 @@ export class NetworkError extends Error {
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const token = getAccessToken()
-  
+  const localAccessToken = getLocalAccessToken()
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   }
@@ -180,8 +201,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     }
   }
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
+  if (localAccessToken) {
+    headers.Authorization = `Bearer ${localAccessToken}`
   }
 
   const emitRateLimitEvent = (response: Response) => {
@@ -203,6 +224,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
       headers,
+      credentials: "include",
     })
 
     if (response.status === 429) {
@@ -210,40 +232,35 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
       throw new ApiError(429, "Rate limit exceeded")
     }
 
-    // If unauthorized, try to refresh token
+    // If unauthorized, try to refresh token using HttpOnly cookie
     if (response.status === 401) {
-      const refreshToken = getRefreshToken()
-      if (refreshToken) {
-        try {
-          await api.refreshToken()
-          // Retry request with new token
-          const newToken = getAccessToken()
-          if (newToken) {
-            headers["Authorization"] = `Bearer ${newToken}`
-            const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
-              ...options,
-              headers,
-            })
-            if (retryResponse.status === 429) {
-              emitRateLimitEvent(retryResponse)
-              throw new ApiError(429, "Rate limit exceeded")
-            }
+      try {
+        await api.refreshToken()
 
-            if (retryResponse.status === 401) {
-              handleUnauthorizedRedirect()
-              throw new ApiError(401, "Session expired")
-            }
+        const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
+          ...options,
+          headers,
+          credentials: "include",
+        })
 
-            if (!retryResponse.ok) {
-              throw new ApiError(retryResponse.status, `API Error: ${retryResponse.statusText}`)
-            }
-            return retryResponse
-          }
-        } catch (refreshError) {
-          // Refresh failed, clear tokens, redirect to login and throw
+        if (retryResponse.status === 429) {
+          emitRateLimitEvent(retryResponse)
+          throw new ApiError(429, "Rate limit exceeded")
+        }
+
+        if (retryResponse.status === 401) {
           handleUnauthorizedRedirect()
           throw new ApiError(401, "Session expired")
         }
+
+        if (!retryResponse.ok) {
+          throw new ApiError(retryResponse.status, `API Error: ${retryResponse.statusText}`)
+        }
+
+        return retryResponse
+      } catch (refreshError) {
+        handleUnauthorizedRedirect()
+        throw new ApiError(401, "Session expired")
       }
 
       handleUnauthorizedRedirect()
@@ -291,11 +308,6 @@ export const api = {
     try {
       // Generate PKCE
       const pkce = await generatePKCE()
-      
-      // Store verifier for token exchange
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('pkce_verifier', pkce.verifier)
-      }
 
       // Step 1: Login to get authorization code
       const loginResponse = await fetch(`${API_AUTH_URL}/auth/login`, {
@@ -332,12 +344,9 @@ export const api = {
   async loginWithProvider(provider: OAuthProvider): Promise<void> {
     try {
       const pkce = await generatePKCE()
-      const state = generateRandomString(16)
-      // const providerRedirectUri = getProviderRedirectUri(provider)
 
-      if (typeof localStorage !== "undefined") {
-        localStorage.setItem("pkce_verifier", pkce.verifier)
-        localStorage.setItem("oauth_state", state)
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY, pkce.verifier)
       }
 
       const query = new URLSearchParams({
@@ -345,7 +354,6 @@ export const api = {
         redirect_uri: REDIRECT_URI,
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
-        state,
       })
 
       if (typeof window !== "undefined") {
@@ -358,7 +366,10 @@ export const api = {
 
   async exchangeCode(code: string, verifier?: string): Promise<TokenResponse> {
     try {
-      const codeVerifier = verifier || (typeof localStorage !== 'undefined' ? localStorage.getItem('pkce_verifier') : null)
+      const fallbackVerifier = typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
+        : null
+      const codeVerifier = verifier || fallbackVerifier
       
       if (!codeVerifier) {
         throw new Error('PKCE verifier not found')
@@ -369,6 +380,7 @@ export const api = {
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           grant_type: 'authorization_code',
           code,
@@ -383,13 +395,10 @@ export const api = {
       }
 
       const tokens = await response.json() as TokenResponse
+      setLocalTokens(tokens)
       
-      // Store tokens
-      storeTokens(tokens)
-      
-      // Clean up verifier
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('pkce_verifier')
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
       }
 
       return tokens
@@ -403,21 +412,18 @@ export const api = {
 
   async refreshToken(): Promise<TokenResponse> {
     try {
-      const refreshToken = getRefreshToken()
-      
-      if (!refreshToken) {
-        throw new ApiError(401, 'No refresh token available')
-      }
+      const localRefreshToken = getLocalRefreshToken()
 
       const response = await fetch(`${API_AUTH_URL}/auth/token`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
+        credentials: "include",
         body: JSON.stringify({
           grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-          client_id: CLIENT_ID
+          client_id: CLIENT_ID,
+          ...(localRefreshToken ? { refresh_token: localRefreshToken } : {})
         }),
       })
 
@@ -426,8 +432,7 @@ export const api = {
       }
 
       const tokens = await response.json() as TokenResponse
-      storeTokens(tokens)
-
+      setLocalTokens(tokens)
       return tokens
     } catch (error) {
       if (error instanceof ApiError) {
@@ -439,20 +444,16 @@ export const api = {
 
   async logout(): Promise<void> {
     try {
-      const refreshToken = getRefreshToken()
-
-      if (refreshToken) {
-        await fetch(`${API_AUTH_URL}/auth/logout`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            refresh_token: refreshToken,
-            client_id: CLIENT_ID
-          })
+      await fetch(`${API_AUTH_URL}/auth/logout`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          client_id: CLIENT_ID
         })
-      }
+      })
 
       clearTokens()
     } catch (error) {
@@ -463,11 +464,6 @@ export const api = {
 
   async getCurrentUser(): Promise<User | null> {
     try {
-      const token = getAccessToken()
-      if (!token) {
-        return null
-      }
-
       const response = await fetchWithAuth('/check/auth')
 
       if (!response.ok) {
