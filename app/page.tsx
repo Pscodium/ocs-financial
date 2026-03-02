@@ -63,6 +63,7 @@ export default function HomePage() {
   const [newCatSplit, setNewCatSplit] = useState("")
   const [newCatType, setNewCatType] = useState<"bills" | "income">("bills")
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
+  const [showCopyPreviousConfirm, setShowCopyPreviousConfirm] = useState(false)
   const [showDeleteMonthConfirm, setShowDeleteMonthConfirm] = useState(false)
 
   const handleLogout = () => {
@@ -91,6 +92,19 @@ export default function HomePage() {
     finance.duplicateMonthTo(nextMonth)
     setShowDuplicateConfirm(false)
     toast.success(`Contas copiadas para ${getMonthLabel(nextMonth)}`)
+  }
+
+  const handleCopyPreviousMonth = () => {
+    const previousMonthKey = shiftMonth(finance.currentMonthKey, -1)
+    const copied = finance.duplicateMonthTo(finance.currentMonthKey, previousMonthKey, true)
+    setShowCopyPreviousConfirm(false)
+
+    if (!copied) {
+      toast.error("O mês anterior não possui dados para copiar.")
+      return
+    }
+
+    toast.success(`Dados de ${getMonthLabel(previousMonthKey)} copiados com sucesso!`)
   }
 
   const handleDeleteMonth = async () => {
@@ -418,7 +432,7 @@ export default function HomePage() {
                    }}>
                      Criar Categoria de Despesas
                    </Button>
-                   <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowDuplicateConfirm(true)}>
+                   <Button variant="ghost" size="sm" className="mt-2" onClick={() => setShowCopyPreviousConfirm(true)}>
                      <Copy className="mr-1.5 h-3 w-3" />
                      Copiar do mês anterior
                    </Button>
@@ -429,7 +443,7 @@ export default function HomePage() {
                     <p>Você ainda não adicionou nenhuma conta este mês.</p>
                     <div className="flex gap-2 mt-4">
                       <Button onClick={() => setShowAddCategory(true)}>Criar Categoria</Button>
-                      <Button variant="outline" onClick={() => setShowDuplicateConfirm(true)}>Copiar Mês Anterior</Button>
+                      <Button variant="outline" onClick={() => setShowCopyPreviousConfirm(true)}>Copiar Mês Anterior</Button>
                     </div>
                 </div>
               )}
@@ -552,6 +566,26 @@ export default function HomePage() {
             <AlertDialogFooter>
               <AlertDialogCancel>Cancelar</AlertDialogCancel>
               <AlertDialogAction onClick={handleDuplicate}>Confirmar Cópia</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <AlertDialog open={showCopyPreviousConfirm} onOpenChange={setShowCopyPreviousConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Copiar do mês anterior?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Isso copiará categorias e contas de{" "}
+                <span className="font-semibold text-foreground">{getMonthLabel(shiftMonth(finance.currentMonthKey, -1))}</span>{" "}
+                para {" "}
+                <span className="font-semibold text-foreground">{getMonthLabel(finance.currentMonthKey)}</span>.
+                <br/><br/>
+                Os valores serão mantidos, mas o status de pagamento será redefinido para "pendente".
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={handleCopyPreviousMonth}>Confirmar Cópia</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

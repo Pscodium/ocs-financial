@@ -262,29 +262,67 @@ export function useFinance() {
   )
 
   const duplicateMonthTo = useCallback(
-    (targetMonthKey: string) => {
-      if (!currentMonth) return
+    (targetMonthKey: string, sourceMonthKey?: string, mergeIntoTarget = false): boolean => {
+      const sourceMonth = sourceMonthKey
+        ? allMonths.find((m) => m.monthKey === sourceMonthKey)
+        : currentMonth
+
+      if (!sourceMonth || sourceMonth.categories.length === 0) {
+        return false
+      }
+
+      const copiedCategories = sourceMonth.categories.map((category) => {
+        const newCategoryId = createId()
+        return {
+          ...category,
+          id: newCategoryId,
+          bills: category.bills.map((bill) => ({
+            ...bill,
+            id: createId(),
+            categoryId: newCategoryId,
+            paid: false,
+          })),
+        }
+      })
+
       const existing = allMonths.find((m) => m.monthKey === targetMonthKey)
-      if (existing) return
+
+      if (existing) {
+        if (!mergeIntoTarget) {
+          return false
+        }
+
+        const updated = allMonths.map((m) => {
+          if (m.monthKey !== targetMonthKey) return m
+          return {
+            ...m,
+            categories: [...m.categories, ...copiedCategories],
+          }
+        })
+
+        persist(updated, targetMonthKey)
+        setCurrentMonthKey(targetMonthKey)
+        return true
+      }
 
       const newMonth: MonthData = {
         monthKey: targetMonthKey,
-        categories: currentMonth.categories.map((c) => ({
-          ...c,
-          id: createId(),
-          bills: c.bills.map((b) => ({
-            ...b,
-            id: createId(),
-            paid: false,
-            amount: b.amount,
-          })),
-        })),
+        categories: copiedCategories,
       }
+
       const updated = [...allMonths, newMonth]
       persist(updated, targetMonthKey)
       setCurrentMonthKey(targetMonthKey)
+      return true
     },
     [allMonths, currentMonth, persist],
+  )
+
+  const copyFromMonthToCurrent = useCallback(
+    (sourceMonthKey: string): boolean => {
+      return duplicateMonthTo(currentMonthKey, sourceMonthKey, true)
+    },
+    [currentMonthKey, duplicateMonthTo],
   )
 
   const getNextAvailableMonthKey = useCallback((removedMonthKey: string, remaining: MonthData[]) => {
@@ -749,6 +787,7 @@ export function useFinance() {
     removeBill,
     toggleBillPaid,
     duplicateMonthTo,
+    copyFromMonthToCurrent,
     deleteMonth,
     getBillCategories,
     getIncomeCategories,

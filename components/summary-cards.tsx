@@ -1,10 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatCurrency } from "@/lib/types"
 import { DollarSign, CheckCircle2, Clock, TrendingUp, Wallet, PiggyBank, ArrowUpRight, ArrowDownRight, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 interface SummaryCardsProps {
   total: number
@@ -52,6 +54,9 @@ function PercentageChange({ current, previous, showPositiveAsGood = true }: Perc
 }
 
 export function SummaryCards({ total, paid, income, myShare, sobra, previousMonthData }: SummaryCardsProps) {
+  const isMobile = useIsMobile()
+  const [openTooltip, setOpenTooltip] = useState<string | null>(null)
+
   const pending = total - paid
   const paidPercent = total > 0 ? Math.round((paid / total) * 100) : 0
   const hasSplit = myShare !== total
@@ -65,9 +70,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
     <TooltipProvider delayDuration={300}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
         {/* Saldo em Conta */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "income" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "income" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "income" ? null : "income"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                   <Wallet className="h-5 w-5 text-primary" />
@@ -105,9 +113,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
         </Tooltip>
 
         {/* Total do Mes */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "total" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "total" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "total" ? null : "total"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
                   <DollarSign className="h-5 w-5 text-foreground" />
@@ -153,9 +164,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
         </Tooltip>
 
         {/* Pago */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "paid" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "paid" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "paid" ? null : "paid"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-success/10">
                   <CheckCircle2 className="h-5 w-5 text-success" />
@@ -193,9 +207,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
         </Tooltip>
 
         {/* Pendente */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "pending" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "pending" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "pending" ? null : "pending"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-warning/10">
                   <Clock className="h-5 w-5 text-warning" />
@@ -233,9 +250,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
         </Tooltip>
 
         {/* Sobra do Mes */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "leftover" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "leftover" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "leftover" ? null : "leftover"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div
                   className={cn(
@@ -286,9 +306,12 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
         </Tooltip>
 
         {/* Progresso */}
-        <Tooltip>
+        <Tooltip open={isMobile ? openTooltip === "progress" : undefined} onOpenChange={(open) => {
+          if (!isMobile) return
+          setOpenTooltip(open ? "progress" : null)
+        }}>
           <TooltipTrigger asChild>
-            <Card className="border-none shadow-sm cursor-help transition-shadow hover:shadow-md">
+            <Card onClick={() => isMobile && setOpenTooltip((prev) => (prev === "progress" ? null : "progress"))} className="border-none shadow-sm cursor-pointer md:cursor-help transition-shadow hover:shadow-md">
               <CardContent className="flex items-center gap-3 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-secondary">
                   <TrendingUp className="h-5 w-5 text-foreground" />

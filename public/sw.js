@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ocs-financial-v2'
+const CACHE_NAME = 'ocs-financial-v3'
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
@@ -41,8 +41,9 @@ self.addEventListener('fetch', event => {
 
   const isSameOrigin = url.origin === self.location.origin
   const isApiRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')
+  const isNextAsset = url.pathname.startsWith('/_next/')
 
-  if (!isSameOrigin || isApiRequest) {
+  if (!isSameOrigin || isApiRequest || isNextAsset) {
     return
   }
 
