@@ -9,6 +9,8 @@ const PENDING_SOCIAL_PKCE_VERIFIER_KEY = "pending_social_code_verifier"
 const ACCESS_TOKEN_STORAGE_KEY = "access_token"
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token"
 const FORCE_LOCAL_TOKEN_STORAGE = process.env.NEXT_PUBLIC_USE_LOCAL_TOKENS === "true"
+const REFRESH_BACKOFF_BASE_MS = 2_000
+const REFRESH_BACKOFF_MAX_MS = 30_000
 
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
 let monthsCache: MonthData[] | null = null
@@ -57,6 +59,21 @@ interface TokenResponse {
   token_type?: string
 }
 
+type TokenState = {
+  accessToken: string | null
+  expiresAt: number
+}
+
+const tokenState: TokenState = {
+  accessToken: null,
+  expiresAt: 0,
+}
+
+let refreshPromise: Promise<TokenResponse> | null = null
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let refreshFailureCount = 0
+let nextRefreshAllowedAt = 0
+
 function isLocalEnvironment(): boolean {
   if (typeof window === "undefined") {
     return false
@@ -88,12 +105,79 @@ function setLocalTokens(tokens: TokenResponse) {
   }
 }
 
+function clearRefreshTimer() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+function scheduleRefresh(expiresInSeconds?: number) {
+  clearRefreshTimer()
+
+  if (!expiresInSeconds || expiresInSeconds <= 0) {
+    return
+  }
+
+  const refreshInMs = Math.max(5_000, (expiresInSeconds - 60) * 1000)
+
+  refreshTimer = setTimeout(() => {
+    void api.refreshToken().catch(() => {
+      const retryDelayMs = Math.max(5_000, nextRefreshAllowedAt - Date.now())
+      if (retryDelayMs > 0) {
+        scheduleRefresh(Math.ceil(retryDelayMs / 1000))
+      }
+    })
+  }, refreshInMs)
+}
+
+function calculateRefreshBackoffMs(): number {
+  if (refreshFailureCount <= 0) {
+    return REFRESH_BACKOFF_BASE_MS
+  }
+
+  const exp = Math.min(refreshFailureCount - 1, 6)
+  return Math.min(REFRESH_BACKOFF_MAX_MS, REFRESH_BACKOFF_BASE_MS * (2 ** exp))
+}
+
+function resetRefreshBackoff() {
+  refreshFailureCount = 0
+  nextRefreshAllowedAt = 0
+}
+
+function registerRefreshFailure() {
+  refreshFailureCount += 1
+  nextRefreshAllowedAt = Date.now() + calculateRefreshBackoffMs()
+}
+
+function setSessionState(tokens: TokenResponse) {
+  if (tokens.access_token) {
+    tokenState.accessToken = tokens.access_token
+  }
+
+  if (tokens.expires_in && tokens.expires_in > 0) {
+    tokenState.expiresAt = Date.now() + tokens.expires_in * 1000
+  }
+
+  scheduleRefresh(tokens.expires_in)
+}
+
+function clearSessionState() {
+  tokenState.accessToken = null
+  tokenState.expiresAt = 0
+  clearRefreshTimer()
+}
+
 function getLocalAccessToken(): string | null {
   if (typeof localStorage === "undefined" || !shouldUseLocalTokenStorage()) {
     return null
   }
 
   return localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
+}
+
+function getActiveAccessToken(): string | null {
+  return tokenState.accessToken || getLocalAccessToken()
 }
 
 function getLocalRefreshToken(): string | null {
@@ -105,6 +189,8 @@ function getLocalRefreshToken(): string | null {
 }
 
 function clearTokens() {
+  clearSessionState()
+
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('user_data')
     localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
@@ -180,29 +266,31 @@ export class NetworkError extends Error {
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const localAccessToken = getLocalAccessToken()
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  }
-
-  // Merge existing headers
-  if (options.headers) {
-    if (options.headers instanceof Headers) {
-      options.headers.forEach((value, key) => {
-        headers[key] = value
-      })
-    } else if (Array.isArray(options.headers)) {
-      options.headers.forEach(([key, value]) => {
-        headers[key] = value
-      })
-    } else {
-      Object.assign(headers, options.headers)
+  const buildHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
     }
-  }
 
-  if (localAccessToken) {
-    headers.Authorization = `Bearer ${localAccessToken}`
+    if (options.headers) {
+      if (options.headers instanceof Headers) {
+        options.headers.forEach((value, key) => {
+          headers[key] = value
+        })
+      } else if (Array.isArray(options.headers)) {
+        options.headers.forEach(([key, value]) => {
+          headers[key] = value
+        })
+      } else {
+        Object.assign(headers, options.headers)
+      }
+    }
+
+    const activeAccessToken = getActiveAccessToken()
+    if (activeAccessToken) {
+      headers.Authorization = `Bearer ${activeAccessToken}`
+    }
+
+    return headers
   }
 
   const emitRateLimitEvent = (response: Response) => {
@@ -221,6 +309,8 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   try {
+    const headers = buildHeaders()
+
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
       headers,
@@ -237,9 +327,11 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
       try {
         await api.refreshToken()
 
+        const retryHeaders = buildHeaders()
+
         const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
           ...options,
-          headers,
+          headers: retryHeaders,
           credentials: "include",
         })
 
@@ -259,12 +351,17 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 
         return retryResponse
       } catch (refreshError) {
-        handleUnauthorizedRedirect()
-        throw new ApiError(401, "Session expired")
-      }
+        if (refreshError instanceof ApiError && (refreshError.status === 400 || refreshError.status === 401)) {
+          handleUnauthorizedRedirect()
+          throw new ApiError(401, "Session expired")
+        }
 
-      handleUnauthorizedRedirect()
-      throw new ApiError(401, "Unauthorized")
+        if (refreshError instanceof ApiError) {
+          throw refreshError
+        }
+
+        throw new NetworkError()
+      }
     }
 
     if (!response.ok) {
@@ -282,6 +379,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
 }
 
 export const api = {
+  async startAuthSession(): Promise<void> {
+    await this.refreshToken()
+  },
+
   // Auth - OAuth2 with PKCE Flow
   async register(payload: RegisterPayload): Promise<void> {
     try {
@@ -396,6 +497,7 @@ export const api = {
 
       const tokens = await response.json() as TokenResponse
       setLocalTokens(tokens)
+      setSessionState(tokens)
       
       if (typeof sessionStorage !== "undefined") {
         sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
@@ -411,34 +513,54 @@ export const api = {
   },
 
   async refreshToken(): Promise<TokenResponse> {
+    if (refreshPromise) {
+      return refreshPromise
+    }
+
+    if (nextRefreshAllowedAt > Date.now()) {
+      throw new ApiError(429, "Refresh temporarily throttled")
+    }
+
+    refreshPromise = (async () => {
+      try {
+        const localRefreshToken = getLocalRefreshToken()
+
+        const response = await fetch(`${API_AUTH_URL}/auth/token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            grant_type: 'refresh_token',
+            client_id: CLIENT_ID,
+            ...(localRefreshToken ? { refresh_token: localRefreshToken } : {})
+          }),
+        })
+
+        if (!response.ok) {
+          throw new ApiError(response.status, "Failed to refresh token")
+        }
+
+        const tokens = await response.json() as TokenResponse
+        resetRefreshBackoff()
+        setLocalTokens(tokens)
+        setSessionState(tokens)
+        return tokens
+      } catch (error) {
+        registerRefreshFailure()
+
+        if (error instanceof ApiError) {
+          throw error
+        }
+        throw new NetworkError()
+      }
+    })()
+
     try {
-      const localRefreshToken = getLocalRefreshToken()
-
-      const response = await fetch(`${API_AUTH_URL}/auth/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          grant_type: 'refresh_token',
-          client_id: CLIENT_ID,
-          ...(localRefreshToken ? { refresh_token: localRefreshToken } : {})
-        }),
-      })
-
-      if (!response.ok) {
-        throw new ApiError(response.status, "Failed to refresh token")
-      }
-
-      const tokens = await response.json() as TokenResponse
-      setLocalTokens(tokens)
-      return tokens
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error
-      }
-      throw new NetworkError()
+      return await refreshPromise
+    } finally {
+      refreshPromise = null
     }
   },
 

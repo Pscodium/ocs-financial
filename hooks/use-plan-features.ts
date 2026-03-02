@@ -71,7 +71,7 @@ async function fetchFeatureAccess(planIdentifier: string | null): Promise<TabFea
 }
 
 export function usePlanFeatures(): UsePlanFeaturesResult {
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth()
+  const { user, isAuthenticated, isInitializing: isAuthInitializing } = useAuth()
   const planIdentifier = getUserPlanIdentifier(user)
   const [featureAccess, setFeatureAccess] = useState<TabFeatureAccess>(getDefaultTabFeatureAccess)
   const [isLoading, setIsLoading] = useState(true)
@@ -80,7 +80,7 @@ export function usePlanFeatures(): UsePlanFeaturesResult {
     let isCancelled = false
 
     const loadFeatures = async () => {
-      if (isAuthLoading) {
+      if (isAuthInitializing) {
         return
       }
 
@@ -106,7 +106,7 @@ export function usePlanFeatures(): UsePlanFeaturesResult {
     return () => {
       isCancelled = true
     }
-  }, [planIdentifier, isAuthenticated, isAuthLoading])
+  }, [planIdentifier, isAuthenticated, isAuthInitializing])
 
   return {
     featureAccess,

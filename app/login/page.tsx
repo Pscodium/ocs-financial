@@ -67,7 +67,7 @@ export default function LoginPage() {
   const [localError, setLocalError] = useState<string | null>(null)
   const [registerSuccess, setRegisterSuccess] = useState<string | null>(null)
   const [providerLoading, setProviderLoading] = useState<OAuthProvider | null>(null)
-  const { login, loginWithProvider, register, isLoading, isAuthenticated, error } = useAuth()
+  const { login, loginWithProvider, register, isLoading, isInitializing, isAuthenticated, error } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -135,6 +135,14 @@ export default function LoginPage() {
   }
 
   const displayError = localError ?? error
+
+  if (isInitializing) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

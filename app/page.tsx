@@ -10,6 +10,7 @@ import { SummaryCards } from "@/components/summary-cards"
 import { CategoryCard } from "@/components/category-card"
 import { MonthSelector } from "@/components/month-selector"
 import { MonthlyChart } from "@/components/monthly-chart"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -140,6 +141,78 @@ export default function HomePage() {
 
   const incomeCategories = finance.getIncomeCategories()
   const billCategories = finance.getBillCategories()
+
+  if (!finance.loaded) {
+    return (
+      <AuthGuard>
+        <div className="min-h-screen bg-muted/20 pb-12">
+          <header className="sticky top-0 z-20 w-full bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <div className="border-b">
+              <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2.5 rounded-lg bg-primary/10 px-3 py-1.5">
+                    <Wallet className="h-5 w-5 text-primary" />
+                    <span className="font-semibold tracking-tight select-none text-foreground hidden sm:inline-block">Gestor Financeiro</span>
+                  </div>
+                  <div className="h-6 w-px bg-border hidden sm:block" />
+                  <MonthSelector currentMonthKey={finance.currentMonthKey} onChange={finance.setCurrentMonthKey} />
+                </div>
+              </div>
+              <AppTabs />
+            </div>
+          </header>
+
+          <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div className="mb-8">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="mt-2 h-4 w-80 max-w-full" />
+            </div>
+
+            <div className="mb-10 grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div key={index} className="rounded-xl bg-card p-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-3 w-24" />
+                      <Skeleton className="h-6 w-32" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+              <div className="lg:col-span-12 xl:col-span-5 space-y-5">
+                <Skeleton className="h-6 w-44" />
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <div key={`income-${index}`} className="rounded-xl bg-card p-5 shadow-sm space-y-3">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="lg:col-span-12 xl:col-span-7 space-y-5">
+                <Skeleton className="h-6 w-44" />
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <div key={`bill-${index}`} className="rounded-xl bg-card p-5 shadow-sm space-y-3">
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </main>
+        </div>
+      </AuthGuard>
+    )
+  }
 
   return (
     <AuthGuard>

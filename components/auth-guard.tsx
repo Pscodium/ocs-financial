@@ -7,23 +7,23 @@ import { usePlanFeatures } from "@/hooks/use-plan-features"
 import { getFirstAllowedPath, isPathAllowedByFeatures } from "@/lib/feature-flags"
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isInitializing } = useAuth()
   const { featureAccess, isLoading: isFeaturesLoading } = usePlanFeatures()
   const router = useRouter()
   const pathname = usePathname()
   const isFeatureRouteAllowed = isPathAllowedByFeatures(pathname, featureAccess)
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+    if (!isInitializing && !isAuthenticated && pathname !== "/login") {
       router.push("/login")
     }
 
-    if (!isLoading && !isFeaturesLoading && isAuthenticated && pathname !== "/login" && !isFeatureRouteAllowed) {
+    if (!isInitializing && !isFeaturesLoading && isAuthenticated && pathname !== "/login" && !isFeatureRouteAllowed) {
       router.replace(getFirstAllowedPath(featureAccess))
     }
-  }, [isAuthenticated, isLoading, isFeaturesLoading, isFeatureRouteAllowed, featureAccess, router, pathname])
+  }, [isAuthenticated, isInitializing, isFeaturesLoading, isFeatureRouteAllowed, featureAccess, router, pathname])
 
-  if (isLoading || isFeaturesLoading) {
+  if (isInitializing || isFeaturesLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
