@@ -5,6 +5,7 @@ import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/use-auth'
 import { PWARegister } from '@/components/pwa-register'
 import { IOSBounceGuard } from '@/components/ios-bounce-guard' 
+import { QueryProvider } from "@/components/query-provider"
 
 import './globals.css'
 
@@ -42,9 +43,11 @@ export default function RootLayout({
       <body className={`${_inter.variable} ${_jetbrains.variable} font-sans antialiased`}>
         <IOSBounceGuard />
         <PWARegister />
-        <AuthProvider>
-          {children}
-        </AuthProvider>
+        <QueryProvider>
+          <AuthProvider>
+            {children}
+          </AuthProvider>
+        </QueryProvider>
         <Toaster richColors position="top-right" />
       </body>
     </html>

@@ -1,9 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import type { Bill, Category, MonthData } from "@/lib/types"
 import { createId, getCurrentMonthKey } from "@/lib/types"
 import { api, ApiError, NetworkError } from "@/lib/api"
+import { queryKeys } from "@/lib/query-keys"
 
 async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, modifiedMonthKey?: string): Promise<void> {
   if (!modifiedMonthKey) {
@@ -42,60 +44,59 @@ async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, mod
 }
 
 export function useFinance() {
-  const [allMonths, setAllMonths] = useState<MonthData[]>([])
+  const queryClient = useQueryClient()
   const [currentMonthKey, setCurrentMonthKey] = useState(getCurrentMonthKey())
-  const [loaded, setLoaded] = useState(false)
-  const [isSyncing, setIsSyncing] = useState(false)
   const [hasPendingChanges, setHasPendingChanges] = useState(false)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestSaveRef = useRef<MonthData[] | null>(null)
   const modifiedMonthKeyRef = useRef<string | null>(null)
   const serverMonthKeysRef = useRef<Set<string>>(new Set())
 
+  const monthsQuery = useQuery({
+    queryKey: queryKeys.financeMonths,
+    queryFn: api.getMonths,
+    staleTime: 30_000,
+  })
+
+  const allMonths = monthsQuery.data ?? []
+
+  const setMonthsInCache = useCallback(
+    (months: MonthData[]) => {
+      queryClient.setQueryData(queryKeys.financeMonths, months)
+    },
+    [queryClient],
+  )
+
+  useEffect(() => {
+    if (!monthsQuery.data) {
+      return
+    }
+
+    const validMonths = monthsQuery.data.filter((month) => month && month.monthKey)
+    serverMonthKeysRef.current = new Set(validMonths.map((month) => month.monthKey))
+    setHasPendingChanges(false)
+  }, [monthsQuery.data])
+
   const scheduleSave = useCallback((months: MonthData[], modifiedMonthKey?: string) => {
     latestSaveRef.current = months
     modifiedMonthKeyRef.current = modifiedMonthKey || null
+    setHasPendingChanges(true)
+
     if (saveTimerRef.current) {
       clearTimeout(saveTimerRef.current)
     }
+
     saveTimerRef.current = setTimeout(async () => {
       if (!latestSaveRef.current) return
 
       try {
         await saveToApi(latestSaveRef.current, serverMonthKeysRef.current, modifiedMonthKeyRef.current || undefined)
+        setHasPendingChanges(false)
       } catch (error) {
         if (error instanceof NetworkError) return
         console.error("Erro ao salvar mês:", error)
       }
     }, 500)
-  }, [])
-
-  useEffect(() => {
-    async function loadData() {
-      setIsSyncing(true)
-
-      try {
-        const apiMonths = await api.getMonths()
-
-        const validMonths = apiMonths.filter((m) => m && m.monthKey)
-        serverMonthKeysRef.current = new Set(validMonths.map((m) => m.monthKey))
-
-        if (validMonths.length === 0) {
-          setAllMonths([])
-        } else {
-          setAllMonths(validMonths)
-        }
-        setHasPendingChanges(false)
-      } catch {
-        setAllMonths([])
-        setHasPendingChanges(false)
-      } finally {
-        setIsSyncing(false)
-        setLoaded(true)
-      }
-    }
-
-    loadData()
   }, [])
 
   useEffect(() => {
@@ -109,13 +110,13 @@ export function useFinance() {
   const currentMonth = allMonths.find((m) => m.monthKey === currentMonthKey)
 
   const persist = useCallback((updated: MonthData[], modifiedMonthKey?: string) => {
-    setAllMonths(updated)
+    setMonthsInCache(updated)
     scheduleSave(updated, modifiedMonthKey)
-  }, [scheduleSave])
+  }, [scheduleSave, setMonthsInCache])
 
   const applyLocalUpdate = useCallback((updated: MonthData[]) => {
-    setAllMonths(updated)
-  }, [])
+    setMonthsInCache(updated)
+  }, [setMonthsInCache])
 
   const syncOfflineChanges = useCallback(async () => {
     setHasPendingChanges(false)
@@ -770,13 +771,13 @@ export function useFinance() {
   )
 
   return {
-    loaded,
+    loaded: !monthsQuery.isPending,
     allMonths,
     currentMonthKey,
     setCurrentMonthKey,
     currentMonth,
-    isSyncing,
-    hasPendingChanges: false,
+    isSyncing: monthsQuery.isFetching || hasPendingChanges,
+    hasPendingChanges,
     syncOfflineChanges,
     discardOfflineChanges,
     addCategory,

@@ -1,9 +1,11 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api, type User, type OAuthProvider, ApiError, NetworkError } from "@/lib/api"
 import { getUserPlanIdentifier } from "@/lib/feature-flags"
 import { RateLimitModal } from "@/components/rate-limit-modal"
+import { queryKeys } from "@/lib/query-keys"
 
 interface AuthContextType {
   user: User | null
@@ -24,12 +26,94 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(true)
+  const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [isRateLimitOpen, setIsRateLimitOpen] = useState(false)
   const [rateLimitPlanLabel, setRateLimitPlanLabel] = useState("seu plano atual")
+
+  const userQuery = useQuery({
+    queryKey: queryKeys.authUser,
+    queryFn: async () => {
+      try {
+        await api.startAuthSession()
+      } catch {
+        // usuário pode não estar autenticado ainda
+      }
+
+      return api.getCurrentUser()
+    },
+    staleTime: 60_000,
+  })
+
+  const loginMutation = useMutation({
+    mutationFn: async ({ email, password }: { email: string; password: string }) => {
+      await api.login(email, password)
+      return api.getCurrentUser()
+    },
+    onSuccess: (nextUser) => {
+      queryClient.setQueryData(queryKeys.authUser, nextUser)
+    },
+  })
+
+  const providerMutation = useMutation({
+    mutationFn: async (provider: OAuthProvider) => {
+      await api.loginWithProvider(provider)
+    },
+  })
+
+  const oauthCallbackMutation = useMutation({
+    mutationFn: async (payload: { code?: string; state?: string }) => {
+      if (payload.code) {
+        await api.exchangeCode(payload.code)
+      } else {
+        throw new ApiError(400, "Callback OAuth sem code")
+      }
+
+      return api.getCurrentUser()
+    },
+    onSuccess: (nextUser) => {
+      queryClient.setQueryData(queryKeys.authUser, nextUser)
+    },
+  })
+
+  const registerMutation = useMutation({
+    mutationFn: async ({
+      email,
+      password,
+      fullName,
+    }: {
+      email: string
+      password: string
+      fullName: string
+    }) => {
+      await api.register({ email, password, fullName })
+    },
+  })
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await api.logout()
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(queryKeys.authUser, null)
+    },
+  })
+
+  const user = userQuery.data ?? null
+
+  const loginMutateAsync = loginMutation.mutateAsync
+  const providerMutateAsync = providerMutation.mutateAsync
+  const oauthCallbackMutateAsync = oauthCallbackMutation.mutateAsync
+  const registerMutateAsync = registerMutation.mutateAsync
+  const logoutMutateAsync = logoutMutation.mutateAsync
+
+  const isInitializing = userQuery.isPending
+  const isLoading =
+    loginMutation.isPending ||
+    providerMutation.isPending ||
+    oauthCallbackMutation.isPending ||
+    registerMutation.isPending ||
+    logoutMutation.isPending
 
   const formatPlanLabel = useCallback((planIdentifier: string | null) => {
     if (!planIdentifier) {
@@ -42,31 +126,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .filter(Boolean)
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     return words.length > 0 ? words.join(" ") : "seu plano atual"
-  }, [])
-
-  useEffect(() => {
-    const bootstrapAuth = async () => {
-      try {
-        await api.startAuthSession()
-      } catch {
-        // usuário pode não estar autenticado ainda
-      }
-
-      try {
-        const currentUser = await api.getCurrentUser()
-        if (currentUser) {
-          setUser(currentUser)
-        } else {
-          setUser(null)
-        }
-      } catch {
-        setUser(null)
-      }
-    }
-
-    bootstrapAuth().finally(() => {
-      setIsInitializing(false)
-    })
   }, [])
 
   useEffect(() => {
@@ -88,18 +147,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [formatPlanLabel, user])
 
   const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true)
     setError(null)
     try {
-      // Login returns tokens
-      await api.login(email, password)
-      
-      // Fetch user data
-      const userData = await api.getCurrentUser()
-      
-      if (userData) {
-        setUser(userData)
-      }
+      await loginMutateAsync({ email, password })
     } catch (err) {
       if (err instanceof ApiError) {
         setError("Email ou senha inválidos")
@@ -109,16 +159,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError("Erro ao fazer login")
       }
       throw err
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+  }, [loginMutateAsync])
 
   const loginWithProvider = useCallback(async (provider: OAuthProvider) => {
-    setIsLoading(true)
     setError(null)
     try {
-      await api.loginWithProvider(provider)
+      await providerMutateAsync(provider)
     } catch (err) {
       if (err instanceof NetworkError) {
         setError("Não foi possível conectar ao servidor")
@@ -126,30 +173,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError("Erro ao iniciar login com provedor")
       }
       throw err
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+  }, [providerMutateAsync])
 
   const handleOAuthCallback = useCallback(async (payload: {
     code?: string
     state?: string
   }) => {
-    setIsLoading(true)
     setError(null)
 
     try {
-      if (payload.code) {
-        await api.exchangeCode(payload.code)
-      } else {
-        throw new ApiError(400, "Callback OAuth sem code")
-      }
-
-      const userData = await api.getCurrentUser()
-
-      if (userData) {
-        setUser(userData)
-      }
+      await oauthCallbackMutateAsync(payload)
     } catch (err) {
       if (err instanceof ApiError) {
         setError("Não foi possível concluir login com provedor")
@@ -159,16 +193,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError("Erro ao concluir login")
       }
       throw err
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+  }, [oauthCallbackMutateAsync])
 
   const register = useCallback(async (email: string, password: string, fullName: string) => {
-    setIsLoading(true)
     setError(null)
     try {
-      await api.register({ email, password, fullName })
+      await registerMutateAsync({ email, password, fullName })
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
@@ -184,16 +215,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setError("Erro ao criar conta")
       }
       throw err
-    } finally {
-      setIsLoading(false)
     }
-  }, [])
+  }, [registerMutateAsync])
 
   const logout = useCallback(async () => {
-    await api.logout()
-    setUser(null)
+    await logoutMutateAsync()
     setError(null)
-  }, [])
+  }, [logoutMutateAsync])
 
   return (
     <AuthContext.Provider

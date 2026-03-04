@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { useAuth } from "@/hooks/use-auth"
 import {
   getDefaultTabFeatureAccess,
@@ -8,6 +8,7 @@ import {
   resolveTabFeatureAccessFromFeatureMap,
   type TabFeatureAccess,
 } from "@/lib/feature-flags"
+import { queryKeys } from "@/lib/query-keys"
 
 interface UsePlanFeaturesResult {
   featureAccess: TabFeatureAccess
@@ -73,43 +74,23 @@ async function fetchFeatureAccess(planIdentifier: string | null): Promise<TabFea
 export function usePlanFeatures(): UsePlanFeaturesResult {
   const { user, isAuthenticated, isInitializing: isAuthInitializing } = useAuth()
   const planIdentifier = getUserPlanIdentifier(user)
-  const [featureAccess, setFeatureAccess] = useState<TabFeatureAccess>(getDefaultTabFeatureAccess)
-  const [isLoading, setIsLoading] = useState(true)
+  const planKey = getPlanKey(planIdentifier)
 
-  useEffect(() => {
-    let isCancelled = false
-
-    const loadFeatures = async () => {
-      if (isAuthInitializing) {
-        return
-      }
-
+  const featureAccessQuery = useQuery({
+    queryKey: queryKeys.featureAccess(planKey),
+    enabled: !isAuthInitializing,
+    queryFn: async () => {
       if (!isAuthenticated) {
-        if (!isCancelled) {
-          setFeatureAccess(getDefaultTabFeatureAccess())
-          setIsLoading(false)
-        }
-        return
+        return getDefaultTabFeatureAccess()
       }
 
-      const nextAccess = await fetchFeatureAccess(planIdentifier)
-
-      if (!isCancelled) {
-        setFeatureAccess(nextAccess)
-        setIsLoading(false)
-      }
-    }
-
-    setIsLoading(true)
-    loadFeatures()
-
-    return () => {
-      isCancelled = true
-    }
-  }, [planIdentifier, isAuthenticated, isAuthInitializing])
+      return fetchFeatureAccess(planIdentifier)
+    },
+    staleTime: 5 * 60 * 1000,
+  })
 
   return {
-    featureAccess,
-    isLoading,
+    featureAccess: featureAccessQuery.data ?? getDefaultTabFeatureAccess(),
+    isLoading: isAuthInitializing || featureAccessQuery.isPending,
   }
 }
