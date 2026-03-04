@@ -88,7 +88,7 @@ export function AppTabs() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="hidden lg:inline">{tab.label}</span>
               </Link>
             )
           })}
