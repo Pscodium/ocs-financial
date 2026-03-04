@@ -24,6 +24,52 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const FEATURE_PLAN_COOKIE = "feature_plan"
+
+function setPlanCookie(planIdentifier: string | null) {
+  if (typeof document === "undefined") {
+    return
+  }
+
+  if (!planIdentifier) {
+    document.cookie = `${FEATURE_PLAN_COOKIE}=; path=/; max-age=0; samesite=lax`
+    return
+  }
+
+  document.cookie = `${FEATURE_PLAN_COOKIE}=${encodeURIComponent(planIdentifier)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`
+}
+
+const USER_STORAGE_KEY = "auth_user"
+
+function readStoredUser(): User | null {
+  if (typeof window === "undefined") {
+    return null
+  }
+
+  const raw = window.localStorage.getItem(USER_STORAGE_KEY)
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as User
+  } catch {
+    return null
+  }
+}
+
+function writeStoredUser(user: User | null) {
+  if (typeof window === "undefined") {
+    return
+  }
+
+  if (!user) {
+    window.localStorage.removeItem(USER_STORAGE_KEY)
+    return
+  }
+
+  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
@@ -33,16 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userQuery = useQuery({
     queryKey: queryKeys.authUser,
-    queryFn: async () => {
-      try {
-        await api.startAuthSession()
-      } catch {
-        // usuário pode não estar autenticado ainda
-      }
-
-      return api.getCurrentUser()
-    },
-    staleTime: 60_000,
+    queryFn: async () => readStoredUser(),
+    initialData: () => readStoredUser(),
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: Number.POSITIVE_INFINITY,
   })
 
   const loginMutation = useMutation({
@@ -52,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (nextUser) => {
       queryClient.setQueryData(queryKeys.authUser, nextUser)
+      writeStoredUser(nextUser)
     },
   })
 
@@ -73,6 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (nextUser) => {
       queryClient.setQueryData(queryKeys.authUser, nextUser)
+      writeStoredUser(nextUser)
     },
   })
 
@@ -96,6 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(queryKeys.authUser, null)
+      writeStoredUser(null)
     },
   })
 
@@ -127,6 +170,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     return words.length > 0 ? words.join(" ") : "seu plano atual"
   }, [])
+
+  useEffect(() => {
+    const planIdentifier = getUserPlanIdentifier(user)
+    setPlanCookie(planIdentifier)
+  }, [user])
 
   useEffect(() => {
     if (typeof window === "undefined") {

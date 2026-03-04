@@ -2,6 +2,10 @@ import type { MonthData } from "./types"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
+const INTERNAL_SESSION_LOGIN_URL = "/api/private/session/login"
+const INTERNAL_SESSION_REGISTER_URL = "/api/private/session/register"
+const INTERNAL_SESSION_TOKEN_URL = "/api/private/session/token"
+const INTERNAL_SESSION_ME_URL = "/api/private/session/me"
 const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
@@ -15,9 +19,6 @@ const REFRESH_BACKOFF_MAX_MS = 30_000
 let inFlightGetMonthsRequest: Promise<MonthData[]> | null = null
 let monthsCache: MonthData[] | null = null
 let monthsCacheUpdatedAt = 0
-
-console.log('API_BASE_URL:', API_BASE_URL)
-console.log('API_AUTH_URL:', API_AUTH_URL)
 
 // PKCE Helper Functions
 function generateRandomString(length: number): string {
@@ -386,7 +387,7 @@ export const api = {
   // Auth - OAuth2 with PKCE Flow
   async register(payload: RegisterPayload): Promise<void> {
     try {
-      const response = await fetch(`${API_AUTH_URL}/auth/register`, {
+      const response = await fetch(INTERNAL_SESSION_REGISTER_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -411,7 +412,7 @@ export const api = {
       const pkce = await generatePKCE()
 
       // Step 1: Login to get authorization code
-      const loginResponse = await fetch(`${API_AUTH_URL}/auth/login`, {
+      const loginResponse = await fetch(INTERNAL_SESSION_LOGIN_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -476,7 +477,7 @@ export const api = {
         throw new Error('PKCE verifier not found')
       }
 
-      const response = await fetch(`${API_AUTH_URL}/auth/token`, {
+      const response = await fetch(INTERNAL_SESSION_TOKEN_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -525,7 +526,7 @@ export const api = {
       try {
         const localRefreshToken = getLocalRefreshToken()
 
-        const response = await fetch(`${API_AUTH_URL}/auth/token`, {
+        const response = await fetch(INTERNAL_SESSION_TOKEN_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -586,7 +587,15 @@ export const api = {
 
   async getCurrentUser(): Promise<User | null> {
     try {
-      const response = await fetchWithAuth('/check/auth')
+      const activeAccessToken = getActiveAccessToken()
+      const response = await fetch(INTERNAL_SESSION_ME_URL, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          ...(activeAccessToken ? { Authorization: `Bearer ${activeAccessToken}` } : {}),
+        },
+        credentials: "include",
+      })
 
       if (!response.ok) {
         return null
