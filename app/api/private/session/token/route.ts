@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
-const REFRESH_COOKIE = "app_refresh_token"
+const PRIMARY_REFRESH_COOKIE = "refresh_token"
+const LEGACY_REFRESH_COOKIE = "app_refresh_token"
 
-function refreshCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+function normalizeRefreshCookiePath(setCookieValue: string): string {
+  const lower = setCookieValue.toLowerCase()
+  if (!lower.startsWith(`${PRIMARY_REFRESH_COOKIE}=`)) {
+    return setCookieValue
   }
+
+  if (/;\s*path=/i.test(setCookieValue)) {
+    return setCookieValue.replace(/;\s*path=[^;]*/i, "; Path=/")
+  }
+
+  return `${setCookieValue}; Path=/`
 }
 
 export async function POST(request: NextRequest) {
@@ -27,7 +31,10 @@ export async function POST(request: NextRequest) {
       const grantType = payload.grant_type
 
       if (grantType === "refresh_token" && !payload.refresh_token) {
-        const refreshFromCookie = request.cookies.get(REFRESH_COOKIE)?.value
+        const refreshFromCookie =
+          request.cookies.get(PRIMARY_REFRESH_COOKIE)?.value ||
+          request.cookies.get(LEGACY_REFRESH_COOKIE)?.value
+
         if (refreshFromCookie) {
           payload.refresh_token = refreshFromCookie
         }
@@ -62,19 +69,6 @@ export async function POST(request: NextRequest) {
     response.headers.set("content-type", upstreamType)
   }
 
-  if (upstream.ok && upstreamType?.includes("application/json")) {
-    try {
-      const payload = JSON.parse(responseBody) as Record<string, unknown>
-      const refreshToken = payload.refresh_token
-
-      if (typeof refreshToken === "string" && refreshToken.length > 0) {
-        response.cookies.set(REFRESH_COOKIE, refreshToken, refreshCookieOptions())
-      }
-    } catch {
-      // ignore invalid json payloads
-    }
-  }
-
   const upstreamHeaders = upstream.headers as Headers & {
     getSetCookie?: () => string[]
   }
@@ -82,12 +76,12 @@ export async function POST(request: NextRequest) {
 
   if (setCookies.length > 0) {
     for (const cookieValue of setCookies) {
-      response.headers.append("set-cookie", cookieValue)
+      response.headers.append("set-cookie", normalizeRefreshCookiePath(cookieValue))
     }
   } else {
     const setCookie = upstream.headers.get("set-cookie")
     if (setCookie) {
-      response.headers.append("set-cookie", setCookie)
+      response.headers.append("set-cookie", normalizeRefreshCookiePath(setCookie))
     }
   }
 
