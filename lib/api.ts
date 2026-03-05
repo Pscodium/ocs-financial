@@ -12,6 +12,7 @@ const MONTHS_CACHE_TTL_MS = 2000
 const PENDING_SOCIAL_PKCE_VERIFIER_KEY = "pending_social_code_verifier"
 const ACCESS_TOKEN_STORAGE_KEY = "access_token"
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token"
+const SESSION_HINT_STORAGE_KEY = "session_active_hint"
 const FORCE_LOCAL_TOKEN_STORAGE = process.env.NEXT_PUBLIC_USE_LOCAL_TOKENS === "true"
 const REFRESH_BACKOFF_BASE_MS = 2_000
 const REFRESH_BACKOFF_MAX_MS = 30_000
@@ -106,6 +107,27 @@ function setLocalTokens(tokens: TokenResponse) {
   }
 }
 
+function setSessionHint(isActive: boolean) {
+  if (typeof localStorage === "undefined") {
+    return
+  }
+
+  if (isActive) {
+    localStorage.setItem(SESSION_HINT_STORAGE_KEY, "1")
+    return
+  }
+
+  localStorage.removeItem(SESSION_HINT_STORAGE_KEY)
+}
+
+function hasSessionHint(): boolean {
+  if (typeof localStorage === "undefined") {
+    return false
+  }
+
+  return localStorage.getItem(SESSION_HINT_STORAGE_KEY) === "1"
+}
+
 function clearRefreshTimer() {
   if (refreshTimer) {
     clearTimeout(refreshTimer)
@@ -154,6 +176,7 @@ function registerRefreshFailure() {
 function setSessionState(tokens: TokenResponse) {
   if (tokens.access_token) {
     tokenState.accessToken = tokens.access_token
+    setSessionHint(true)
   }
 
   if (tokens.expires_in && tokens.expires_in > 0) {
@@ -191,6 +214,7 @@ function getLocalRefreshToken(): string | null {
 
 function clearTokens() {
   clearSessionState()
+  setSessionHint(false)
 
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('user_data')
@@ -519,9 +543,14 @@ export const api = {
     }
 
     const localRefreshToken = getLocalRefreshToken()
+    const sessionHint = hasSessionHint()
 
     if (shouldUseLocalTokenStorage() && !localRefreshToken) {
       throw new ApiError(401, "No refresh token available")
+    }
+
+    if (!shouldUseLocalTokenStorage() && !localRefreshToken && !sessionHint) {
+      throw new ApiError(401, "No active session hint available")
     }
 
     if (nextRefreshAllowedAt > Date.now()) {
@@ -554,6 +583,10 @@ export const api = {
         return tokens
       } catch (error) {
         registerRefreshFailure()
+
+        if (error instanceof ApiError && (error.status === 400 || error.status === 401)) {
+          setSessionHint(false)
+        }
 
         if (error instanceof ApiError) {
           throw error

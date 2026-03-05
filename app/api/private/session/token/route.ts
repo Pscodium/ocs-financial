@@ -75,9 +75,20 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const setCookie = upstream.headers.get("set-cookie")
-  if (setCookie) {
-    response.headers.set("set-cookie", setCookie)
+  const upstreamHeaders = upstream.headers as Headers & {
+    getSetCookie?: () => string[]
+  }
+  const setCookies = upstreamHeaders.getSetCookie?.() ?? []
+
+  if (setCookies.length > 0) {
+    for (const cookieValue of setCookies) {
+      response.headers.append("set-cookie", cookieValue)
+    }
+  } else {
+    const setCookie = upstream.headers.get("set-cookie")
+    if (setCookie) {
+      response.headers.append("set-cookie", setCookie)
+    }
   }
 
   return response
