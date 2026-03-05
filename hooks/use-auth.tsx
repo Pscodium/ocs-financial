@@ -39,38 +39,6 @@ function setPlanCookie(planIdentifier: string | null) {
   document.cookie = `${FEATURE_PLAN_COOKIE}=${encodeURIComponent(planIdentifier)}; path=/; max-age=${60 * 60 * 24 * 30}; samesite=lax`
 }
 
-const USER_STORAGE_KEY = "auth_user"
-
-function readStoredUser(): User | null {
-  if (typeof window === "undefined") {
-    return null
-  }
-
-  const raw = window.localStorage.getItem(USER_STORAGE_KEY)
-  if (!raw) {
-    return null
-  }
-
-  try {
-    return JSON.parse(raw) as User
-  } catch {
-    return null
-  }
-}
-
-function writeStoredUser(user: User | null) {
-  if (typeof window === "undefined") {
-    return
-  }
-
-  if (!user) {
-    window.localStorage.removeItem(USER_STORAGE_KEY)
-    return
-  }
-
-  window.localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user))
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
@@ -79,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userQuery = useQuery({
     queryKey: queryKeys.authUser,
-    queryFn: async () => readStoredUser(),
-    initialData: () => readStoredUser(),
+    queryFn: async () => null,
+    initialData: null,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: Number.POSITIVE_INFINITY,
   })
@@ -92,7 +60,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (nextUser) => {
       queryClient.setQueryData(queryKeys.authUser, nextUser)
-      writeStoredUser(nextUser)
     },
   })
 
@@ -114,7 +81,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: (nextUser) => {
       queryClient.setQueryData(queryKeys.authUser, nextUser)
-      writeStoredUser(nextUser)
     },
   })
 
@@ -138,7 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
     onSuccess: () => {
       queryClient.setQueryData(queryKeys.authUser, null)
-      writeStoredUser(null)
     },
   })
 
