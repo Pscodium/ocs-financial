@@ -42,7 +42,7 @@ function setPlanCookie(planIdentifier: string | null) {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const shouldBootstrapSession = pathname !== "/login" && pathname !== "/callback"
+  const shouldBootstrapSession = pathname !== "/callback"
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [isRateLimitOpen, setIsRateLimitOpen] = useState(false)
