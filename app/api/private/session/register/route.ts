@@ -4,6 +4,7 @@ const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3
 
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") || "application/json"
+  const cookieHeader = request.headers.get("cookie")
   const body = await request.text()
 
   let upstream: Response
@@ -12,6 +13,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         "Content-Type": contentType,
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       },
       body,
       cache: "no-store",

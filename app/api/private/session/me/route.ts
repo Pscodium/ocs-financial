@@ -4,6 +4,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
+  const cookieHeader = request.headers.get("cookie")
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -11,6 +12,10 @@ export async function GET(request: NextRequest) {
 
   if (authHeader) {
     headers.Authorization = authHeader
+  }
+
+  if (cookieHeader) {
+    headers.Cookie = cookieHeader
   }
 
   let upstream: Response

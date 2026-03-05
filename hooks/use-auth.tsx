@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api, type User, type OAuthProvider, ApiError, NetworkError } from "@/lib/api"
 import { getUserPlanIdentifier } from "@/lib/feature-flags"
@@ -40,6 +41,8 @@ function setPlanCookie(planIdentifier: string | null) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const shouldBootstrapSession = pathname !== "/login" && pathname !== "/callback"
   const queryClient = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [isRateLimitOpen, setIsRateLimitOpen] = useState(false)
@@ -47,10 +50,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const userQuery = useQuery({
     queryKey: queryKeys.authUser,
-    queryFn: async () => null,
-    initialData: null,
-    staleTime: Number.POSITIVE_INFINITY,
-    gcTime: Number.POSITIVE_INFINITY,
+    enabled: shouldBootstrapSession,
+    queryFn: async () => {
+      try {
+        await api.startAuthSession()
+      } catch {
+        // usuário pode não estar autenticado ainda
+      }
+
+      return api.getCurrentUser()
+    },
+    staleTime: 0,
+    gcTime: 5 * 60 * 1000
   })
 
   const loginMutation = useMutation({
@@ -115,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const registerMutateAsync = registerMutation.mutateAsync
   const logoutMutateAsync = logoutMutation.mutateAsync
 
-  const isInitializing = userQuery.isPending
+  const isInitializing = shouldBootstrapSession ? userQuery.isPending : false
   const isLoading =
     loginMutation.isPending ||
     providerMutation.isPending ||
