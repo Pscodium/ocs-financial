@@ -1,16 +1,11 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
-import { cookies } from "next/headers"
 import { Inter, JetBrains_Mono } from 'next/font/google'
-import { dehydrate, QueryClient } from "@tanstack/react-query"
 import { Toaster } from 'sonner'
 import { AuthProvider } from '@/hooks/use-auth'
 import { PWARegister } from '@/components/pwa-register'
 import { IOSBounceGuard } from '@/components/ios-bounce-guard' 
 import { QueryProvider } from "@/components/query-provider"
-import { queryKeys } from "@/lib/query-keys"
-import { fetchFlagsmithFeaturesByIdentity } from "@/lib/server/flagsmith"
-import { resolveTabFeatureAccessFromFeatureMap } from "@/lib/feature-flags"
 
 import './globals.css'
 
@@ -38,36 +33,17 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
-const FEATURE_PLAN_COOKIE = "feature_plan"
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const queryClient = new QueryClient()
-  const cookieStore = await cookies()
-  const planIdentifier = cookieStore.get(FEATURE_PLAN_COOKIE)?.value?.trim() || ""
-
-  if (planIdentifier) {
-    await queryClient.prefetchQuery({
-      queryKey: queryKeys.featureAccess(planIdentifier),
-      queryFn: async () => {
-        const featureMap = await fetchFlagsmithFeaturesByIdentity(planIdentifier)
-        return resolveTabFeatureAccessFromFeatureMap(featureMap)
-      },
-      staleTime: 5 * 60 * 1000,
-    })
-  }
-
-  const dehydratedState = dehydrate(queryClient)
-
   return (
     <html lang="pt-BR">
       <body className={`${_inter.variable} ${_jetbrains.variable} font-sans antialiased`}>
         <IOSBounceGuard />
         <PWARegister />
-        <QueryProvider state={dehydratedState}>
+        <QueryProvider>
           <AuthProvider>
             {children}
           </AuthProvider>
