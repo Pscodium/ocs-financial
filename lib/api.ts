@@ -518,14 +518,18 @@ export const api = {
       return refreshPromise
     }
 
+    const localRefreshToken = getLocalRefreshToken()
+
+    if (shouldUseLocalTokenStorage() && !localRefreshToken) {
+      throw new ApiError(401, "No refresh token available")
+    }
+
     if (nextRefreshAllowedAt > Date.now()) {
       throw new ApiError(429, "Refresh temporarily throttled")
     }
 
     refreshPromise = (async () => {
       try {
-        const localRefreshToken = getLocalRefreshToken()
-
         const response = await fetch(INTERNAL_SESSION_TOKEN_URL, {
           method: "POST",
           headers: {
