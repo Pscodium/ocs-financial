@@ -8,6 +8,7 @@ const FLAGSMITH_API_URL = process.env.FLAGSMITH_API_URL ?? process.env.NEXT_PUBL
 const FLAGSMITH_ENVIRONMENT_KEY = process.env.FLAGSMITH_ENVIRONMENT_KEY ?? process.env.NEXT_PUBLIC_FLAGSMITH_ENVIRONMENT_KEY
 
 const inFlightFeatureRequests = new Map<string, Promise<FeatureMap | null>>()
+const inMemoryFeatureMap = new Map<string, FeatureMap>()
 
 function getFlagsmithIdentitiesUrl(): string | null {
   if (!FLAGSMITH_API_URL) {
@@ -22,6 +23,11 @@ function getFlagsmithIdentitiesUrl(): string | null {
 }
 
 export async function fetchFlagsmithFeaturesByIdentity(plan: string): Promise<FeatureMap | null> {
+  const inMemoryCached = inMemoryFeatureMap.get(plan)
+  if (inMemoryCached) {
+    return inMemoryCached
+  }
+
   const inFlightRequest = inFlightFeatureRequests.get(plan)
   if (inFlightRequest) {
     return inFlightRequest
@@ -73,6 +79,8 @@ export async function fetchFlagsmithFeaturesByIdentity(plan: string): Promise<Fe
         }
         featureMap[name] = Boolean(flag.enabled)
       }
+
+      inMemoryFeatureMap.set(plan, featureMap)
       return featureMap
     } catch {
       if (process.env.NODE_ENV !== "production") {
