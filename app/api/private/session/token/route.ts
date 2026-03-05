@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
 const PRIMARY_REFRESH_COOKIE = "refresh_token"
-const LEGACY_REFRESH_COOKIE = "app_refresh_token"
 
 function normalizeRefreshCookiePath(setCookieValue: string): string {
   const lower = setCookieValue.toLowerCase()
@@ -31,9 +30,7 @@ export async function POST(request: NextRequest) {
       const grantType = payload.grant_type
 
       if (grantType === "refresh_token" && !payload.refresh_token) {
-        const refreshFromCookie =
-          request.cookies.get(PRIMARY_REFRESH_COOKIE)?.value ||
-          request.cookies.get(LEGACY_REFRESH_COOKIE)?.value
+        const refreshFromCookie = request.cookies.get(PRIMARY_REFRESH_COOKIE)?.value
 
         if (refreshFromCookie) {
           payload.refresh_token = refreshFromCookie
