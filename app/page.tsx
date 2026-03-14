@@ -40,7 +40,9 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   LayoutDashboard,
-  Trash2
+  Trash2,
+  GripVertical,
+  Check,
 } from "lucide-react"
 import { toast } from "sonner"
 import { getMonthLabel } from "@/lib/types"
@@ -65,6 +67,11 @@ export default function HomePage() {
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
   const [showCopyPreviousConfirm, setShowCopyPreviousConfirm] = useState(false)
   const [showDeleteMonthConfirm, setShowDeleteMonthConfirm] = useState(false)
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null)
+  const [draggedCategoryType, setDraggedCategoryType] = useState<"bills" | "income" | null>(null)
+  const [dragOverCategoryId, setDragOverCategoryId] = useState<string | null>(null)
+  const [isSavingCategoryOrder, setIsSavingCategoryOrder] = useState(false)
+  const [isCategoryReorderMode, setIsCategoryReorderMode] = useState(false)
 
   const handleLogout = () => {
     logout()
@@ -118,6 +125,114 @@ export default function HomePage() {
     } finally {
       setShowDeleteMonthConfirm(false)
     }
+  }
+
+  const getSortedCurrentCategories = () => {
+    if (!finance.currentMonth) {
+      return []
+    }
+
+    return [...finance.currentMonth.categories].sort((a, b) => {
+      const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER
+      const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER
+      return orderA - orderB
+    })
+  }
+
+  const moveCategory = async (targetCategoryId: string, targetCategoryType: "bills" | "income") => {
+    if (!isCategoryReorderMode || !draggedCategoryId || draggedCategoryId === targetCategoryId || isSavingCategoryOrder) {
+      return
+    }
+
+    if (draggedCategoryType !== targetCategoryType) {
+      return
+    }
+
+    const sortedCategories = getSortedCurrentCategories()
+    const categoriesOfType = sortedCategories.filter((category) => {
+      const categoryType = category.type || "bills"
+      return categoryType === targetCategoryType
+    })
+
+    const categoryIdsOfType = categoriesOfType.map((category) => category.id)
+    const fromIndex = categoryIdsOfType.indexOf(draggedCategoryId)
+    const toIndex = categoryIdsOfType.indexOf(targetCategoryId)
+
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      return
+    }
+
+    const reorderedTypeIds = [...categoryIdsOfType]
+    const [movedId] = reorderedTypeIds.splice(fromIndex, 1)
+    reorderedTypeIds.splice(toIndex, 0, movedId)
+
+    let reorderCursor = 0
+    const orderedCategoryIds = sortedCategories.map((category) => {
+      const categoryType = category.type || "bills"
+      if (categoryType !== targetCategoryType) {
+        return category.id
+      }
+
+      const id = reorderedTypeIds[reorderCursor]
+      reorderCursor += 1
+      return id
+    })
+
+    try {
+      setIsSavingCategoryOrder(true)
+      await finance.reorderCategories(orderedCategoryIds)
+    } catch (error) {
+      toast.error("Nao foi possivel salvar a nova ordem")
+    } finally {
+      setIsSavingCategoryOrder(false)
+      setDraggedCategoryId(null)
+      setDraggedCategoryType(null)
+      setDragOverCategoryId(null)
+    }
+  }
+
+  const startCategoryDrag = (categoryId: string, categoryType: "bills" | "income") => {
+    if (!isCategoryReorderMode || isSavingCategoryOrder) {
+      return
+    }
+
+    setDraggedCategoryId(categoryId)
+    setDraggedCategoryType(categoryType)
+    setDragOverCategoryId(null)
+  }
+
+  const handleCategoryDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+    categoryId: string,
+    categoryType: "bills" | "income",
+  ) => {
+    if (!isCategoryReorderMode || isSavingCategoryOrder || draggedCategoryType !== categoryType) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+
+    if (dragOverCategoryId !== categoryId) {
+      setDragOverCategoryId(categoryId)
+    }
+  }
+
+  const handleCategoryDragEnd = () => {
+    setDraggedCategoryId(null)
+    setDraggedCategoryType(null)
+    setDragOverCategoryId(null)
+  }
+
+  const toggleCategoryReorderMode = () => {
+    if (isSavingCategoryOrder) {
+      return
+    }
+
+    setIsCategoryReorderMode((prev) => !prev)
+    setDraggedCategoryId(null)
+    setDraggedCategoryType(null)
+    setDragOverCategoryId(null)
   }
 
   const total = finance.getGrandTotal()
@@ -293,15 +408,36 @@ export default function HomePage() {
             </div>
 
             {finance.currentMonth && finance.currentMonth.categories.length > 0 && (
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setShowDuplicateConfirm(true)}
-                className="hidden md:flex"
-              >
-                <Copy className="mr-1.5 h-4 w-4" />
-                Copiar para o próximo mês
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant={isCategoryReorderMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={toggleCategoryReorderMode}
+                  className="hidden md:flex"
+                  disabled={isSavingCategoryOrder}
+                >
+                  {isCategoryReorderMode ? (
+                    <>
+                      <Check className="mr-1.5 h-4 w-4" />
+                      Concluir organizacao
+                    </>
+                  ) : (
+                    <>
+                      <GripVertical className="mr-1.5 h-4 w-4" />
+                      Organizar categorias
+                    </>
+                  )}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowDuplicateConfirm(true)}
+                  className="hidden md:flex"
+                >
+                  <Copy className="mr-1.5 h-4 w-4" />
+                  Copiar para o próximo mês
+                </Button>
+              </div>
             )}
           </div>
 
@@ -326,39 +462,84 @@ export default function HomePage() {
                   <ArrowUpCircle className="h-5 w-5 text-green-500" />
                   <h2 className="text-xl font-semibold tracking-tight">Entradas & Saldos</h2>
                 </div>
-                {incomeCategories.length > 0 && <span className="text-sm text-muted-foreground">{incomeCategories.length} categorias</span>}
+                <div className="flex items-center gap-2">
+                  {incomeCategories.length > 0 && <span className="text-sm text-muted-foreground">{incomeCategories.length} categorias</span>}
+                  {incomeCategories.length > 1 && (
+                    <Button
+                      variant={isCategoryReorderMode ? "default" : "ghost"}
+                      size="sm"
+                      onClick={toggleCategoryReorderMode}
+                      className="md:hidden"
+                      disabled={isSavingCategoryOrder}
+                    >
+                      {isCategoryReorderMode ? "Concluir" : "Organizar"}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {incomeCategories.length > 0 ? (
                 <div className="grid gap-5">
                   {incomeCategories.map((category) => (
-                    <CategoryCard
+                    <div
                       key={category.id}
-                      category={category}
-                      totalAmount={finance.getTotalByCategory(category)}
-                      paidAmount={0}
-                      onToggleBill={() => {}}
-                      onUpdateBill={(catId, billId, updates) => {
-                        finance.updateBill(catId, billId, updates)
-                        toast.success("Saldo atualizado!")
+                      onDragOver={(event) => handleCategoryDragOver(event, category.id, "income")}
+                      onDrop={async (event) => {
+                        event.preventDefault()
+                        await moveCategory(category.id, "income")
                       }}
-                      onRemoveBill={(catId, billId) => {
-                        finance.removeBill(catId, billId)
-                        toast.success("Saldo removido!")
-                      }}
-                      onAddBill={(catId, bill) => {
-                        finance.addBill(catId, bill)
-                        toast.success("Saldo adicionado!")
-                      }}
-                      onUpdateCategory={(catId, name, splitBy) => {
-                        finance.updateCategory(catId, name, splitBy)
-                        toast.success("Categoria atualizada!")
-                      }}
-                      onRemoveCategory={(catId) => {
-                        finance.removeCategory(catId)
-                        toast.success("Categoria removida!")
-                      }}
-                    />
+                      className={cn(
+                        "rounded-xl border border-transparent transition-all duration-150",
+                        draggedCategoryId === category.id ? "opacity-60" : "opacity-100",
+                        dragOverCategoryId === category.id && draggedCategoryType === "income"
+                          ? "border-primary/40 bg-primary/5"
+                          : "",
+                        isCategoryReorderMode ? "ring-1 ring-primary/10" : "",
+                      )}
+                    >
+                      <CategoryCard
+                        category={category}
+                        totalAmount={finance.getTotalByCategory(category)}
+                        paidAmount={0}
+                        dragHandleProps={
+                          isCategoryReorderMode
+                            ? {
+                                draggable: !isSavingCategoryOrder,
+                                onDragStart: () => startCategoryDrag(category.id, "income"),
+                                onDragEnd: handleCategoryDragEnd,
+                              }
+                            : undefined
+                        }
+                        onToggleBill={() => {}}
+                        onReorderBills={async (categoryId, orderedBillIds) => {
+                          try {
+                            await finance.reorderBills(categoryId, orderedBillIds)
+                          } catch {
+                            toast.error("Nao foi possivel salvar a ordem das entradas")
+                          }
+                        }}
+                        onUpdateBill={(catId, billId, updates) => {
+                          finance.updateBill(catId, billId, updates)
+                          toast.success("Saldo atualizado!")
+                        }}
+                        onRemoveBill={(catId, billId) => {
+                          finance.removeBill(catId, billId)
+                          toast.success("Saldo removido!")
+                        }}
+                        onAddBill={(catId, bill) => {
+                          finance.addBill(catId, bill)
+                          toast.success("Saldo adicionado!")
+                        }}
+                        onUpdateCategory={(catId, name, splitBy) => {
+                          finance.updateCategory(catId, name, splitBy)
+                          toast.success("Categoria atualizada!")
+                        }}
+                        onRemoveCategory={(catId) => {
+                          finance.removeCategory(catId)
+                          toast.success("Categoria removida!")
+                        }}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -381,41 +562,86 @@ export default function HomePage() {
                    <ArrowDownCircle className="h-5 w-5 text-red-500" />
                    <h2 className="text-xl font-semibold tracking-tight">Despesas & Contas</h2>
                 </div>
-                {billCategories.length > 0 && <span className="text-sm text-muted-foreground">{billCategories.length} categorias</span>}
+                <div className="flex items-center gap-2">
+                  {billCategories.length > 0 && <span className="text-sm text-muted-foreground">{billCategories.length} categorias</span>}
+                  {billCategories.length > 1 && (
+                    <Button
+                      variant={isCategoryReorderMode ? "default" : "ghost"}
+                      size="sm"
+                      onClick={toggleCategoryReorderMode}
+                      className="md:hidden"
+                      disabled={isSavingCategoryOrder}
+                    >
+                      {isCategoryReorderMode ? "Concluir" : "Organizar"}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {billCategories.length > 0 ? (
                 <div className="grid gap-5">
                   {billCategories.map((category) => (
-                    <CategoryCard
+                    <div
                       key={category.id}
-                      category={category}
-                      totalAmount={finance.getTotalByCategory(category)}
-                      paidAmount={finance.getPaidByCategory(category)}
-                      onToggleBill={(catId, billId) => {
-                        finance.toggleBillPaid(catId, billId)
+                      onDragOver={(event) => handleCategoryDragOver(event, category.id, "bills")}
+                      onDrop={async (event) => {
+                        event.preventDefault()
+                        await moveCategory(category.id, "bills")
                       }}
-                      onUpdateBill={(catId, billId, updates) => {
-                        finance.updateBill(catId, billId, updates)
-                        toast.success("Conta atualizada!")
-                      }}
-                      onRemoveBill={(catId, billId) => {
-                        finance.removeBill(catId, billId)
-                        toast.success("Conta removida!")
-                      }}
-                      onAddBill={(catId, bill) => {
-                        finance.addBill(catId, bill)
-                        toast.success("Conta adicionada!")
-                      }}
-                      onUpdateCategory={(catId, name, splitBy) => {
-                        finance.updateCategory(catId, name, splitBy)
-                        toast.success("Categoria atualizada!")
-                      }}
-                      onRemoveCategory={(catId) => {
-                        finance.removeCategory(catId)
-                        toast.success("Categoria removida!")
-                      }}
-                    />
+                      className={cn(
+                        "rounded-xl border border-transparent transition-all duration-150",
+                        draggedCategoryId === category.id ? "opacity-60" : "opacity-100",
+                        dragOverCategoryId === category.id && draggedCategoryType === "bills"
+                          ? "border-primary/40 bg-primary/5"
+                          : "",
+                        isCategoryReorderMode ? "ring-1 ring-primary/10" : "",
+                      )}
+                    >
+                      <CategoryCard
+                        category={category}
+                        totalAmount={finance.getTotalByCategory(category)}
+                        paidAmount={finance.getPaidByCategory(category)}
+                        dragHandleProps={
+                          isCategoryReorderMode
+                            ? {
+                                draggable: !isSavingCategoryOrder,
+                                onDragStart: () => startCategoryDrag(category.id, "bills"),
+                                onDragEnd: handleCategoryDragEnd,
+                              }
+                            : undefined
+                        }
+                        onToggleBill={(catId, billId) => {
+                          finance.toggleBillPaid(catId, billId)
+                        }}
+                        onReorderBills={async (categoryId, orderedBillIds) => {
+                          try {
+                            await finance.reorderBills(categoryId, orderedBillIds)
+                          } catch {
+                            toast.error("Nao foi possivel salvar a ordem das contas")
+                          }
+                        }}
+                        onUpdateBill={(catId, billId, updates) => {
+                          finance.updateBill(catId, billId, updates)
+                          toast.success("Conta atualizada!")
+                        }}
+                        onRemoveBill={(catId, billId) => {
+                          finance.removeBill(catId, billId)
+                          toast.success("Conta removida!")
+                        }}
+                        onAddBill={(catId, bill) => {
+                          finance.addBill(catId, bill)
+                          toast.success("Conta adicionada!")
+                        }}
+                        onUpdateCategory={(catId, name, splitBy) => {
+                          finance.updateCategory(catId, name, splitBy)
+                          toast.success("Categoria atualizada!")
+                        }}
+                        onRemoveCategory={(catId) => {
+                          finance.removeCategory(catId)
+                          toast.success("Categoria removida!")
+                        }}
+                      />
+                    </div>
                   ))}
                 </div>
               ) : incomeCategories.length > 0 ? (

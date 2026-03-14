@@ -7,6 +7,22 @@ import { createId, getCurrentMonthKey } from "@/lib/types"
 import { api, ApiError, NetworkError } from "@/lib/api"
 import { queryKeys } from "@/lib/query-keys"
 
+function sortCategoriesByOrder(categories: Category[]): Category[] {
+  return [...categories].sort((a, b) => {
+    const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER
+    const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER
+    return orderA - orderB
+  })
+}
+
+function sortBillsByOrder(bills: Bill[]): Bill[] {
+  return [...bills].sort((a, b) => {
+    const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER
+    const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER
+    return orderA - orderB
+  })
+}
+
 async function saveToApi(months: MonthData[], serverMonthKeys?: Set<string>, modifiedMonthKey?: string): Promise<void> {
   if (!modifiedMonthKey) {
     return
@@ -208,6 +224,62 @@ export function useFinance() {
     [allMonths, currentMonthKey, persist],
   )
 
+  const reorderCategories = useCallback(
+    async (orderedCategoryIds: string[]) => {
+      const existingMonth = allMonths.find((m) => m.monthKey === currentMonthKey)
+      if (!existingMonth || existingMonth.categories.length <= 1) {
+        return
+      }
+
+      const originalCategories = existingMonth.categories
+      const categoryById = new Map(originalCategories.map((category) => [category.id, category]))
+      const uniqueValidIds = Array.from(new Set(orderedCategoryIds)).filter((id) => categoryById.has(id))
+
+      if (uniqueValidIds.length !== originalCategories.length) {
+        return
+      }
+
+      const reorderedCategories = uniqueValidIds.map((id, index) => {
+        const category = categoryById.get(id)
+        return {
+          ...category!,
+          sortOrder: index,
+        }
+      })
+
+      const updated = allMonths.map((month) => {
+        if (month.monthKey !== currentMonthKey) {
+          return month
+        }
+
+        return {
+          ...month,
+          categories: reorderedCategories,
+        }
+      })
+
+      applyLocalUpdate(updated)
+
+      try {
+        await api.reorderCategories(currentMonthKey, uniqueValidIds)
+      } catch (error) {
+        const rollback = allMonths.map((month) => {
+          if (month.monthKey !== currentMonthKey) {
+            return month
+          }
+
+          return {
+            ...month,
+            categories: originalCategories,
+          }
+        })
+        applyLocalUpdate(rollback)
+        throw error
+      }
+    },
+    [allMonths, applyLocalUpdate, currentMonthKey],
+  )
+
   // Bill / entry operations
   const addBill = useCallback(
     (categoryId: string, bill: Omit<Bill, "id" | "categoryId">) => {
@@ -218,9 +290,13 @@ export function useFinance() {
           ...m,
           categories: m.categories.map((c) => {
             if (c.id !== categoryId) return c
+            const lastSortOrder = c.bills.reduce((max, current) => {
+              const value = current.sortOrder ?? -1
+              return value > max ? value : max
+            }, -1)
             return {
               ...c,
-              bills: [...c.bills, { ...bill, id: createId(), categoryId }],
+              bills: [...c.bills, { ...bill, id: createId(), categoryId, sortOrder: lastSortOrder + 1 }],
             }
           }),
         }
@@ -288,6 +364,82 @@ export function useFinance() {
       persist(updated, currentMonthKey)
     },
     [allMonths, currentMonthKey, persist],
+  )
+
+  const reorderBills = useCallback(
+    async (categoryId: string, orderedBillIds: string[]) => {
+      const existingMonth = allMonths.find((m) => m.monthKey === currentMonthKey)
+      const existingCategory = existingMonth?.categories.find((category) => category.id === categoryId)
+
+      if (!existingMonth || !existingCategory || existingCategory.bills.length <= 1) {
+        return
+      }
+
+      const originalBills = existingCategory.bills
+      const billById = new Map(originalBills.map((bill) => [bill.id, bill]))
+      const uniqueValidIds = Array.from(new Set(orderedBillIds)).filter((id) => billById.has(id))
+
+      if (uniqueValidIds.length !== originalBills.length) {
+        return
+      }
+
+      const reorderedBills = uniqueValidIds.map((billId, index) => {
+        const bill = billById.get(billId)
+        return {
+          ...bill!,
+          sortOrder: index,
+        }
+      })
+
+      const updated = allMonths.map((month) => {
+        if (month.monthKey !== currentMonthKey) {
+          return month
+        }
+
+        return {
+          ...month,
+          categories: month.categories.map((category) => {
+            if (category.id !== categoryId) {
+              return category
+            }
+
+            return {
+              ...category,
+              bills: reorderedBills,
+            }
+          }),
+        }
+      })
+
+      applyLocalUpdate(updated)
+
+      try {
+        await api.reorderBills(currentMonthKey, categoryId, uniqueValidIds)
+      } catch (error) {
+        const rollback = allMonths.map((month) => {
+          if (month.monthKey !== currentMonthKey) {
+            return month
+          }
+
+          return {
+            ...month,
+            categories: month.categories.map((category) => {
+              if (category.id !== categoryId) {
+                return category
+              }
+
+              return {
+                ...category,
+                bills: originalBills,
+              }
+            }),
+          }
+        })
+        applyLocalUpdate(rollback)
+        throw error
+      }
+    },
+    [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
   const duplicateMonthTo = useCallback(
@@ -409,20 +561,20 @@ export function useFinance() {
   // Computed values
   const getBillCategories = useCallback((): Category[] => {
     if (!currentMonth) return []
-    return currentMonth.categories.filter((c) => c.type === "bills" || !c.type)
+    return sortCategoriesByOrder(currentMonth.categories.filter((c) => c.type === "bills" || !c.type))
   }, [currentMonth])
 
   const getIncomeCategories = useCallback((): Category[] => {
     if (!currentMonth) return []
-    return currentMonth.categories.filter((c) => c.type === "income")
+    return sortCategoriesByOrder(currentMonth.categories.filter((c) => c.type === "income"))
   }, [currentMonth])
 
   const getTotalByCategory = useCallback((category: Category) => {
-    return category.bills.reduce((sum, b) => sum + b.amount, 0)
+    return sortBillsByOrder(category.bills).reduce((sum, b) => sum + b.amount, 0)
   }, [])
 
   const getPaidByCategory = useCallback((category: Category) => {
-    return category.bills.filter((b) => b.paid).reduce((sum, b) => sum + b.amount, 0)
+    return sortBillsByOrder(category.bills).filter((b) => b.paid).reduce((sum, b) => sum + b.amount, 0)
   }, [])
 
   const getGrandTotal = useCallback(() => {
@@ -811,10 +963,12 @@ export function useFinance() {
     addCategory,
     updateCategory,
     removeCategory,
+    reorderCategories,
     addBill,
     updateBill,
     removeBill,
     toggleBillPaid,
+    reorderBills,
     duplicateMonthTo,
     copyFromMonthToCurrent,
     deleteMonth,

@@ -5,6 +5,7 @@ export interface Bill {
   paid: boolean
   categoryId: string
   note?: string
+  sortOrder?: number
 }
 
 export interface Category {
@@ -15,6 +16,8 @@ export interface Category {
   type: "bills" | "income"
   /** Optional divisor (e.g., split house bills by 2) */
   splitBy?: number
+  /** Order index provided by backend */
+  sortOrder?: number
 }
 
 export interface MonthData {
@@ -68,6 +71,10 @@ export interface Subscription {
 }
 
 export function createId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36)
 }
 

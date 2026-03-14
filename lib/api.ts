@@ -743,6 +743,34 @@ export const api = {
     })
   },
 
+  async reorderCategories(monthKey: string, orderedCategoryIds: string[]): Promise<MonthData | void> {
+    invalidateMonthsCache()
+    const response = await fetchWithAuth(`/months/${monthKey}/categories/reorder`, {
+      method: "PUT",
+      body: JSON.stringify({ orderedCategoryIds }),
+    })
+
+    if (response.status === 204) {
+      return
+    }
+
+    return await response.json()
+  },
+
+  async reorderBills(monthKey: string, categoryId: string, orderedBillIds: string[]): Promise<MonthData | void> {
+    invalidateMonthsCache()
+    const response = await fetchWithAuth(`/months/${monthKey}/categories/${categoryId}/bills/reorder`, {
+      method: "PUT",
+      body: JSON.stringify({ orderedBillIds }),
+    })
+
+    if (response.status === 204) {
+      return
+    }
+
+    return await response.json()
+  },
+
   // Budgets CRUD
   async getBudgets(monthKey: string): Promise<import("./types").Budget[]> {
     const response = await fetchWithAuth(`/months/${monthKey}/budgets`)

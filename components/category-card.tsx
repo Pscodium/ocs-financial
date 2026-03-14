@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type ButtonHTMLAttributes } from "react"
 import type { Bill, Category } from "@/lib/types"
 import { formatCurrency } from "@/lib/types"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -15,6 +15,9 @@ import {
   Trash2,
   SplitSquareHorizontal,
   Wallet,
+  GripVertical,
+  Check,
+  ArrowUpDown,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -30,11 +33,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 
 interface CategoryCardProps {
   category: Category
   totalAmount: number
   paidAmount: number
+  dragHandleProps?: ButtonHTMLAttributes<HTMLButtonElement>
+  onReorderBills: (categoryId: string, orderedBillIds: string[]) => Promise<void> | void
   onToggleBill: (categoryId: string, billId: string) => void
   onUpdateBill: (
     categoryId: string,
@@ -51,6 +57,8 @@ export function CategoryCard({
   category,
   totalAmount,
   paidAmount,
+  dragHandleProps,
+  onReorderBills,
   onToggleBill,
   onUpdateBill,
   onRemoveBill,
@@ -66,6 +74,10 @@ export function CategoryCard({
   const [showEditCategory, setShowEditCategory] = useState(false)
   const [editCatName, setEditCatName] = useState(category.name)
   const [editCatSplit, setEditCatSplit] = useState(category.splitBy ? String(category.splitBy) : "")
+  const [draggedBillId, setDraggedBillId] = useState<string | null>(null)
+  const [dragOverBillId, setDragOverBillId] = useState<string | null>(null)
+  const [isSavingBillOrder, setIsSavingBillOrder] = useState(false)
+  const [isBillReorderMode, setIsBillReorderMode] = useState(false)
 
   const isIncome = category.type === "income"
   const paidCount = category.bills.filter((b) => b.paid).length
@@ -95,10 +107,83 @@ export function CategoryCard({
 
   const addLabel = isIncome ? "Adicionar saldo" : "Adicionar conta"
   const emptyLabel = isIncome ? "Nenhum saldo adicionado" : "Nenhuma conta adicionada"
+  const orderedBills = [...category.bills].sort((a, b) => {
+    const orderA = a.sortOrder ?? Number.MAX_SAFE_INTEGER
+    const orderB = b.sortOrder ?? Number.MAX_SAFE_INTEGER
+    return orderA - orderB
+  })
+
+  const startBillDrag = (billId: string) => {
+    if (!isBillReorderMode || isSavingBillOrder) {
+      return
+    }
+
+    setDraggedBillId(billId)
+    setDragOverBillId(null)
+  }
+
+  const handleBillDragOver = (event: React.DragEvent<HTMLDivElement>, billId: string) => {
+    if (!isBillReorderMode || !draggedBillId || isSavingBillOrder) {
+      return
+    }
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = "move"
+
+    if (dragOverBillId !== billId) {
+      setDragOverBillId(billId)
+    }
+  }
+
+  const handleBillDrop = async (event: React.DragEvent<HTMLDivElement>, targetBillId: string) => {
+    event.preventDefault()
+
+    if (!isBillReorderMode || !draggedBillId || draggedBillId === targetBillId || isSavingBillOrder) {
+      return
+    }
+
+    const orderedBillIds = orderedBills.map((bill) => bill.id)
+    const fromIndex = orderedBillIds.indexOf(draggedBillId)
+    const toIndex = orderedBillIds.indexOf(targetBillId)
+
+    if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      return
+    }
+
+    const nextOrderedIds = [...orderedBillIds]
+    const [movedId] = nextOrderedIds.splice(fromIndex, 1)
+    nextOrderedIds.splice(toIndex, 0, movedId)
+
+    try {
+      setIsSavingBillOrder(true)
+      await onReorderBills(category.id, nextOrderedIds)
+    } finally {
+      setIsSavingBillOrder(false)
+      setDraggedBillId(null)
+      setDragOverBillId(null)
+    }
+  }
+
+  const handleBillDragEnd = () => {
+    setDraggedBillId(null)
+    setDragOverBillId(null)
+  }
+
+  const canReorderBills = orderedBills.length > 1
+
+  const toggleBillReorderMode = () => {
+    if (!canReorderBills || isSavingBillOrder) {
+      return
+    }
+
+    setIsBillReorderMode((prev) => !prev)
+    setDraggedBillId(null)
+    setDragOverBillId(null)
+  }
 
   return (
     <>
-      <Card className="border-none shadow-sm">
+      <Card className="group/card border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
@@ -145,7 +230,18 @@ export function CategoryCard({
                 </p>
               )}
             </div>
-            <DropdownMenu>
+            {dragHandleProps && (
+              <Button
+                {...dragHandleProps}
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 text-muted-foreground cursor-grab active:cursor-grabbing"
+                aria-label="Arrastar categoria"
+              >
+                <GripVertical className="h-4 w-4" />
+              </Button>
+            )}
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button
                   size="icon"
@@ -157,6 +253,12 @@ export function CategoryCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {canReorderBills && (
+                  <DropdownMenuItem onClick={toggleBillReorderMode} disabled={isSavingBillOrder}>
+                    {isBillReorderMode ? <Check className="mr-2 h-4 w-4" /> : <ArrowUpDown className="mr-2 h-4 w-4" />}
+                    {isBillReorderMode ? "Concluir organizacao" : "Organizar contas"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   onClick={() => {
                     setEditCatName(category.name)
@@ -179,29 +281,63 @@ export function CategoryCard({
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 pt-0">
+          {isBillReorderMode && canReorderBills && (
+            <p className="mb-1 rounded-md bg-primary/5 px-2 py-1 text-xs text-primary">
+              Arraste a linha para reorganizar {isIncome ? "entradas" : "contas"}.
+            </p>
+          )}
+
           {category.bills.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">{emptyLabel}</p>
           )}
 
           {isIncome
-            ? category.bills.map((entry) => (
-                <IncomeItem
+            ? orderedBills.map((entry) => (
+                <div
                   key={entry.id}
-                  entry={entry}
-                  categoryId={category.id}
-                  onUpdate={onUpdateBill}
-                  onRemove={onRemoveBill}
-                />
+                  draggable={isBillReorderMode && !isSavingBillOrder}
+                  onDragStart={() => startBillDrag(entry.id)}
+                  onDragEnd={handleBillDragEnd}
+                  onDragOver={(event) => handleBillDragOver(event, entry.id)}
+                  onDrop={async (event) => handleBillDrop(event, entry.id)}
+                  className={cn(
+                    "rounded-lg border border-transparent transition-all duration-200 ease-out",
+                    draggedBillId === entry.id ? "scale-[0.995] opacity-60 shadow-sm" : "opacity-100",
+                    isBillReorderMode ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+                    dragOverBillId === entry.id ? "border-primary/40 bg-primary/5 translate-y-[-1px]" : "",
+                  )}
+                >
+                  <IncomeItem
+                    entry={entry}
+                    categoryId={category.id}
+                    onUpdate={onUpdateBill}
+                    onRemove={onRemoveBill}
+                  />
+                </div>
               ))
-            : category.bills.map((bill) => (
-                <BillItem
+            : orderedBills.map((bill) => (
+                <div
                   key={bill.id}
-                  bill={bill}
-                  categoryId={category.id}
-                  onToggle={onToggleBill}
-                  onUpdate={onUpdateBill}
-                  onRemove={onRemoveBill}
-                />
+                  draggable={isBillReorderMode && !isSavingBillOrder}
+                  onDragStart={() => startBillDrag(bill.id)}
+                  onDragEnd={handleBillDragEnd}
+                  onDragOver={(event) => handleBillDragOver(event, bill.id)}
+                  onDrop={async (event) => handleBillDrop(event, bill.id)}
+                  className={cn(
+                    "rounded-lg border border-transparent transition-all duration-200 ease-out",
+                    draggedBillId === bill.id ? "scale-[0.995] opacity-60 shadow-sm" : "opacity-100",
+                    isBillReorderMode ? "cursor-grab active:cursor-grabbing" : "cursor-default",
+                    dragOverBillId === bill.id ? "border-primary/40 bg-primary/5 translate-y-[-1px]" : "",
+                  )}
+                >
+                  <BillItem
+                    bill={bill}
+                    categoryId={category.id}
+                    onToggle={onToggleBill}
+                    onUpdate={onUpdateBill}
+                    onRemove={onRemoveBill}
+                  />
+                </div>
               ))}
 
           {showAddBill ? (
