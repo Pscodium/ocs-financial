@@ -35,7 +35,7 @@ function mapFlagsToFeatureMap(data: { flags?: Array<{ feature?: { name?: string 
   return featureMap
 }
 
-export async function fetchFlagsmithFeaturesByIdentity(
+export async function fetchFeaturesByIdentity(
   { authorizationHeader, cookieHeader }: ForwardedAuthHeaders = {},
 ): Promise<FeatureMap | null> {
   const cacheKey = authorizationHeader ?? cookieHeader ?? "anonymous"
@@ -53,7 +53,7 @@ export async function fetchFlagsmithFeaturesByIdentity(
 
   if (!identityProxyUrl) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn("[flagsmith] Variáveis ausentes: API_URL/NEXT_PUBLIC_API_URL")
+      console.warn("[feature-flags] Variáveis ausentes: API_URL/NEXT_PUBLIC_API_URL")
     }
     return null
   }
@@ -78,7 +78,7 @@ export async function fetchFlagsmithFeaturesByIdentity(
 
       if (!response.ok) {
         if (process.env.NODE_ENV !== "production") {
-          console.warn(`[flagsmith] Request falhou (${response.status}) para ${identityProxyUrl}`)
+          console.warn(`[feature-flags] Request falhou (${response.status}) para ${identityProxyUrl}`)
         }
         return null
       }
@@ -93,7 +93,7 @@ export async function fetchFlagsmithFeaturesByIdentity(
       return featureMap
     } catch {
       if (process.env.NODE_ENV !== "production") {
-        console.warn(`[flagsmith] Erro de rede ao consultar ${identityProxyUrl}`)
+        console.warn(`[feature-flags] Erro de rede ao consultar ${identityProxyUrl}`)
       }
       return null
     } finally {

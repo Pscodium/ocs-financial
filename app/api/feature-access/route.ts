@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { resolveTabFeatureAccessFromFeatureMap } from "@/lib/feature-flags"
-import { fetchFlagsmithFeaturesByIdentity } from "@/lib/server/flagsmith"
+import { fetchFeaturesByIdentity } from "@/lib/server/feature-flags"
 
 export async function GET(request: NextRequest) {
   try {
-    const featureMap = await fetchFlagsmithFeaturesByIdentity({
+    const featureMap = await fetchFeaturesByIdentity({
       authorizationHeader: request.headers.get("authorization"),
       cookieHeader: request.headers.get("cookie"),
     })
