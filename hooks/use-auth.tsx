@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const oauthCallbackMutation = useMutation({
     mutationFn: async (payload: { code?: string; state?: string }) => {
       if (payload.code) {
-        await api.exchangeCode(payload.code)
+        await api.exchangeCode(payload.code, undefined, payload.state)
       } else {
         throw new ApiError(400, "Callback OAuth sem code")
       }

@@ -10,6 +10,7 @@ const CLIENT_ID = "ocs-financial"
 const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URI || "http://localhost:3001/callback"
 const MONTHS_CACHE_TTL_MS = 2000
 const PENDING_SOCIAL_PKCE_VERIFIER_KEY = "pending_social_code_verifier"
+const PENDING_SOCIAL_OAUTH_STATE_KEY = "pending_social_oauth_state"
 const ACCESS_TOKEN_STORAGE_KEY = "access_token"
 const REFRESH_TOKEN_STORAGE_KEY = "refresh_token"
 const SESSION_HINT_STORAGE_KEY = "session_active_hint"
@@ -224,6 +225,7 @@ function clearTokens() {
 
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
+    sessionStorage.removeItem(PENDING_SOCIAL_OAUTH_STATE_KEY)
   }
 }
 
@@ -292,9 +294,7 @@ export class NetworkError extends Error {
 
 async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const buildHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    }
+    const headers: Record<string, string> = {}
 
     if (options.headers) {
       if (options.headers instanceof Headers) {
@@ -308,6 +308,14 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
       } else {
         Object.assign(headers, options.headers)
       }
+    }
+
+    const method = (options.method ?? "GET").toUpperCase()
+    const hasBody = options.body !== undefined && options.body !== null
+    const hasContentTypeHeader = Object.keys(headers).some((key) => key.toLowerCase() === "content-type")
+
+    if (hasBody && method !== "GET" && method !== "HEAD" && !hasContentTypeHeader) {
+      headers["Content-Type"] = "application/json"
     }
 
     const activeAccessToken = getActiveAccessToken()
@@ -470,9 +478,11 @@ export const api = {
   async loginWithProvider(provider: OAuthProvider): Promise<void> {
     try {
       const pkce = await generatePKCE()
+      const state = generateRandomString(16)
 
       if (typeof sessionStorage !== "undefined") {
         sessionStorage.setItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY, pkce.verifier)
+        sessionStorage.setItem(PENDING_SOCIAL_OAUTH_STATE_KEY, state)
       }
 
       const query = new URLSearchParams({
@@ -480,6 +490,7 @@ export const api = {
         redirect_uri: REDIRECT_URI,
         code_challenge: pkce.challenge,
         code_challenge_method: "S256",
+        state,
       })
 
       if (typeof window !== "undefined") {
@@ -490,15 +501,26 @@ export const api = {
     }
   },
 
-  async exchangeCode(code: string, verifier?: string): Promise<TokenResponse> {
+  async exchangeCode(code: string, verifier?: string, state?: string): Promise<TokenResponse> {
     try {
       const fallbackVerifier = typeof sessionStorage !== "undefined"
         ? sessionStorage.getItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
+        : null
+      const expectedState = typeof sessionStorage !== "undefined"
+        ? sessionStorage.getItem(PENDING_SOCIAL_OAUTH_STATE_KEY)
         : null
       const codeVerifier = verifier || fallbackVerifier
       
       if (!codeVerifier) {
         throw new Error('PKCE verifier not found')
+      }
+
+      if (expectedState !== null && expectedState !== state) {
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
+          sessionStorage.removeItem(PENDING_SOCIAL_OAUTH_STATE_KEY)
+        }
+        throw new ApiError(400, "Invalid OAuth state")
       }
 
       const response = await fetch(INTERNAL_SESSION_TOKEN_URL, {
@@ -526,6 +548,7 @@ export const api = {
       
       if (typeof sessionStorage !== "undefined") {
         sessionStorage.removeItem(PENDING_SOCIAL_PKCE_VERIFIER_KEY)
+        sessionStorage.removeItem(PENDING_SOCIAL_OAUTH_STATE_KEY)
       }
 
       return tokens

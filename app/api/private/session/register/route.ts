@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
+const API_AUTH_URL = process.env.API_AUTH_URL ?? process.env.NEXT_PUBLIC_API_AUTH_URL ?? "http://localhost:3000"
 
 export async function POST(request: NextRequest) {
   const contentType = request.headers.get("content-type") || "application/json"
@@ -30,9 +30,20 @@ export async function POST(request: NextRequest) {
     response.headers.set("content-type", upstreamType)
   }
 
-  const setCookie = upstream.headers.get("set-cookie")
-  if (setCookie) {
-    response.headers.set("set-cookie", setCookie)
+  const upstreamHeaders = upstream.headers as Headers & {
+    getSetCookie?: () => string[]
+  }
+  const setCookies = upstreamHeaders.getSetCookie?.() ?? []
+
+  if (setCookies.length > 0) {
+    for (const cookieValue of setCookies) {
+      response.headers.append("set-cookie", cookieValue)
+    }
+  } else {
+    const setCookie = upstream.headers.get("set-cookie")
+    if (setCookie) {
+      response.headers.append("set-cookie", setCookie)
+    }
   }
 
   return response

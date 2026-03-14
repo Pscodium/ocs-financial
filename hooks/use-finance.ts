@@ -119,12 +119,44 @@ export function useFinance() {
   }, [setMonthsInCache])
 
   const syncOfflineChanges = useCallback(async () => {
-    setHasPendingChanges(false)
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+
+    if (!latestSaveRef.current || !modifiedMonthKeyRef.current) {
+      setHasPendingChanges(false)
+      return
+    }
+
+    try {
+      await saveToApi(latestSaveRef.current, serverMonthKeysRef.current, modifiedMonthKeyRef.current)
+      latestSaveRef.current = null
+      modifiedMonthKeyRef.current = null
+      setHasPendingChanges(false)
+    } catch (error) {
+      if (error instanceof NetworkError) {
+        setHasPendingChanges(true)
+        return
+      }
+
+      console.error("Erro ao sincronizar alterações pendentes:", error)
+      setHasPendingChanges(true)
+    }
   }, [])
 
   const discardOfflineChanges = useCallback(async () => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+
+    latestSaveRef.current = null
+    modifiedMonthKeyRef.current = null
     setHasPendingChanges(false)
-  }, [])
+
+    await queryClient.invalidateQueries({ queryKey: queryKeys.financeMonths })
+  }, [queryClient])
 
   const ensureMonth = useCallback(
     (monthKey: string): MonthData[] => {

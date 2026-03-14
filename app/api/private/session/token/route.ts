@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
+const API_AUTH_URL = process.env.API_AUTH_URL ?? process.env.NEXT_PUBLIC_API_AUTH_URL ?? "http://localhost:3000"
 const PRIMARY_REFRESH_COOKIE = "refresh_token"
 
 function normalizeRefreshCookiePath(setCookieValue: string): string {
