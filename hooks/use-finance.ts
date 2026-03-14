@@ -54,7 +54,13 @@ export function useFinance() {
 
   const monthsQuery = useQuery({
     queryKey: queryKeys.financeMonths,
-    queryFn: api.getMonths,
+    queryFn: async () => {
+      const months = await api.getMonths()
+      const validMonths = months.filter((month) => month && month.monthKey)
+      serverMonthKeysRef.current = new Set(validMonths.map((month) => month.monthKey))
+      setHasPendingChanges(false)
+      return months
+    },
     staleTime: 30_000,
   })
 
@@ -66,16 +72,6 @@ export function useFinance() {
     },
     [queryClient],
   )
-
-  useEffect(() => {
-    if (!monthsQuery.data) {
-      return
-    }
-
-    const validMonths = monthsQuery.data.filter((month) => month && month.monthKey)
-    serverMonthKeysRef.current = new Set(validMonths.map((month) => month.monthKey))
-    setHasPendingChanges(false)
-  }, [monthsQuery.data])
 
   const scheduleSave = useCallback((months: MonthData[], modifiedMonthKey?: string) => {
     latestSaveRef.current = months
