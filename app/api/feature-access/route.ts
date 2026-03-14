@@ -2,16 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { resolveTabFeatureAccessFromFeatureMap } from "@/lib/feature-flags"
 import { fetchFlagsmithFeaturesByIdentity } from "@/lib/server/flagsmith"
 
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const payload = (await request.json()) as { plan?: unknown }
-    const plan = typeof payload.plan === "string" ? payload.plan.trim() : ""
-
-    if (!plan) {
-      return NextResponse.json({ access: resolveTabFeatureAccessFromFeatureMap(null) })
-    }
-
-    const featureMap = await fetchFlagsmithFeaturesByIdentity(plan)
+    const featureMap = await fetchFlagsmithFeaturesByIdentity({
+      authorizationHeader: request.headers.get("authorization"),
+      cookieHeader: request.headers.get("cookie"),
+    })
     const access = resolveTabFeatureAccessFromFeatureMap(featureMap)
 
     return NextResponse.json({ access })

@@ -3,65 +3,82 @@ import "server-only"
 import { isKnownFeature, type FeatureName } from "@/lib/feature-flags"
 
 type FeatureMap = Partial<Record<FeatureName, boolean>>
+type ForwardedAuthHeaders = {
+  authorizationHeader?: string | null
+  cookieHeader?: string | null
+}
 
-const FLAGSMITH_API_URL = process.env.FLAGSMITH_API_URL ?? process.env.NEXT_PUBLIC_FLAGSMITH_API_URL
-const FLAGSMITH_ENVIRONMENT_KEY = process.env.FLAGSMITH_ENVIRONMENT_KEY ?? process.env.NEXT_PUBLIC_FLAGSMITH_ENVIRONMENT_KEY
+const API_BASE_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL
 
 const inFlightFeatureRequests = new Map<string, Promise<FeatureMap | null>>()
 const inMemoryFeatureMap = new Map<string, FeatureMap>()
 
-function getFlagsmithIdentitiesUrl(): string | null {
-  if (!FLAGSMITH_API_URL) {
+function getIdentityProxyUrl(): string | null {
+  if (!API_BASE_URL) {
     return null
   }
 
-  const normalizedBase = FLAGSMITH_API_URL
-    .replace(/\/$/, "")
-    .replace(/\/api\/v1$/i, "")
-
-  return `${normalizedBase}/api/v1/identities/`
+  return `${API_BASE_URL.replace(/\/$/, "")}/identity`
 }
 
-export async function fetchFlagsmithFeaturesByIdentity(plan: string): Promise<FeatureMap | null> {
-  const inMemoryCached = inMemoryFeatureMap.get(plan)
+function mapFlagsToFeatureMap(data: { flags?: Array<{ feature?: { name?: string }; enabled?: boolean }> }): FeatureMap {
+  const featureMap: FeatureMap = {}
+
+  for (const flag of data.flags ?? []) {
+    const name = flag.feature?.name
+    if (!name || !isKnownFeature(name)) {
+      continue
+    }
+    featureMap[name] = Boolean(flag.enabled)
+  }
+
+  return featureMap
+}
+
+export async function fetchFlagsmithFeaturesByIdentity(
+  { authorizationHeader, cookieHeader }: ForwardedAuthHeaders = {},
+): Promise<FeatureMap | null> {
+  const cacheKey = authorizationHeader ?? cookieHeader ?? "anonymous"
+  const inMemoryCached = inMemoryFeatureMap.get(cacheKey)
   if (inMemoryCached) {
     return inMemoryCached
   }
 
-  const inFlightRequest = inFlightFeatureRequests.get(plan)
+  const inFlightRequest = inFlightFeatureRequests.get(cacheKey)
   if (inFlightRequest) {
     return inFlightRequest
   }
 
-  if (!FLAGSMITH_API_URL || !FLAGSMITH_ENVIRONMENT_KEY) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("[flagsmith] Variáveis ausentes: FLAGSMITH_API_URL e/ou FLAGSMITH_ENVIRONMENT_KEY")
-    }
-    return null
-  }
+  const identityProxyUrl = getIdentityProxyUrl()
 
-  const identitiesUrl = getFlagsmithIdentitiesUrl()
-  if (!identitiesUrl) {
+  if (!identityProxyUrl) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[flagsmith] Variáveis ausentes: API_URL/NEXT_PUBLIC_API_URL")
+    }
     return null
   }
 
   const requestPromise = (async () => {
     try {
-      const response = await fetch(identitiesUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Environment-Key": FLAGSMITH_ENVIRONMENT_KEY,
-        },
-        body: JSON.stringify({
-          identifier: plan,
-        }),
+      const headers: HeadersInit = {}
+
+      if (authorizationHeader) {
+        headers.Authorization = authorizationHeader
+      }
+
+      if (cookieHeader) {
+        headers.Cookie = cookieHeader
+      }
+
+      const response = await fetch(identityProxyUrl, {
+        method: "GET",
+        headers,
         cache: "no-store",
       })
 
       if (!response.ok) {
         if (process.env.NODE_ENV !== "production") {
-          console.warn(`[flagsmith] Request falhou (${response.status}) para ${identitiesUrl}`)
+          console.warn(`[flagsmith] Request falhou (${response.status}) para ${identityProxyUrl}`)
         }
         return null
       }
@@ -70,28 +87,20 @@ export async function fetchFlagsmithFeaturesByIdentity(plan: string): Promise<Fe
         flags?: Array<{ feature?: { name?: string }; enabled?: boolean }>
       }
 
-      const featureMap: FeatureMap = {}
+      const featureMap = mapFlagsToFeatureMap(data)
 
-      for (const flag of data.flags ?? []) {
-        const name = flag.feature?.name
-        if (!name || !isKnownFeature(name)) {
-          continue
-        }
-        featureMap[name] = Boolean(flag.enabled)
-      }
-
-      inMemoryFeatureMap.set(plan, featureMap)
+      inMemoryFeatureMap.set(cacheKey, featureMap)
       return featureMap
     } catch {
       if (process.env.NODE_ENV !== "production") {
-        console.warn(`[flagsmith] Erro de rede ao consultar ${identitiesUrl}`)
+        console.warn(`[flagsmith] Erro de rede ao consultar ${identityProxyUrl}`)
       }
       return null
     } finally {
-      inFlightFeatureRequests.delete(plan)
+      inFlightFeatureRequests.delete(cacheKey)
     }
   })()
 
-  inFlightFeatureRequests.set(plan, requestPromise)
+  inFlightFeatureRequests.set(cacheKey, requestPromise)
   return requestPromise
 }

@@ -1,6 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
+import { fetchWithSessionAuth } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
 import {
   getUserPlanIdentifier,
@@ -22,16 +23,12 @@ function getPlanKey(planIdentifier: string | null): string {
   return planIdentifier && planIdentifier.trim().length > 0 ? planIdentifier.trim() : "__no_plan__"
 }
 
-async function fetchFeatureAccess(planIdentifier: string | null): Promise<TabFeatureAccess> {
+async function fetchFeatureAccess(): Promise<TabFeatureAccess> {
   let nextAccess = resolveTabFeatureAccessFromFeatureMap(null)
 
   try {
-    const response = await fetch("/api/feature-access", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ plan: planIdentifier }),
+    const response = await fetchWithSessionAuth("/api/feature-access", {
+      method: "GET",
       cache: "no-store",
     })
 
@@ -61,7 +58,7 @@ export function usePlanFeatures(): UsePlanFeaturesResult {
         return resolveTabFeatureAccessFromFeatureMap(null)
       }
 
-      return fetchFeatureAccess(planIdentifier)
+      return fetchFeatureAccess()
     },
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,

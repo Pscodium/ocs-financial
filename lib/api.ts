@@ -292,40 +292,50 @@ export class NetworkError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
-  const buildHeaders = (): Record<string, string> => {
-    const headers: Record<string, string> = {}
+function buildAuthenticatedHeaders(options: RequestInit = {}): Record<string, string> {
+  const headers: Record<string, string> = {}
 
-    if (options.headers) {
-      if (options.headers instanceof Headers) {
-        options.headers.forEach((value, key) => {
-          headers[key] = value
-        })
-      } else if (Array.isArray(options.headers)) {
-        options.headers.forEach(([key, value]) => {
-          headers[key] = value
-        })
-      } else {
-        Object.assign(headers, options.headers)
-      }
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      options.headers.forEach((value, key) => {
+        headers[key] = value
+      })
+    } else if (Array.isArray(options.headers)) {
+      options.headers.forEach(([key, value]) => {
+        headers[key] = value
+      })
+    } else {
+      Object.assign(headers, options.headers)
     }
-
-    const method = (options.method ?? "GET").toUpperCase()
-    const hasBody = options.body !== undefined && options.body !== null
-    const hasContentTypeHeader = Object.keys(headers).some((key) => key.toLowerCase() === "content-type")
-
-    if (hasBody && method !== "GET" && method !== "HEAD" && !hasContentTypeHeader) {
-      headers["Content-Type"] = "application/json"
-    }
-
-    const activeAccessToken = getActiveAccessToken()
-    if (activeAccessToken) {
-      headers.Authorization = `Bearer ${activeAccessToken}`
-    }
-
-    return headers
   }
 
+  const method = (options.method ?? "GET").toUpperCase()
+  const hasBody = options.body !== undefined && options.body !== null
+  const hasContentTypeHeader = Object.keys(headers).some((key) => key.toLowerCase() === "content-type")
+
+  if (hasBody && method !== "GET" && method !== "HEAD" && !hasContentTypeHeader) {
+    headers["Content-Type"] = "application/json"
+  }
+
+  const activeAccessToken = getActiveAccessToken()
+  if (activeAccessToken) {
+    headers.Authorization = `Bearer ${activeAccessToken}`
+  }
+
+  return headers
+}
+
+export async function fetchWithSessionAuth(url: string, options: RequestInit = {}): Promise<Response> {
+  const headers = buildAuthenticatedHeaders(options)
+
+  return fetch(url, {
+    ...options,
+    headers,
+    credentials: "include",
+  })
+}
+
+async function fetchWithAuth(url: string, options: RequestInit = {}) {
   const emitRateLimitEvent = (response: Response) => {
     if (typeof window === "undefined") {
       return
@@ -342,7 +352,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
   }
 
   try {
-    const headers = buildHeaders()
+    const headers = buildAuthenticatedHeaders(options)
 
     const response = await fetch(`${API_BASE_URL}${url}`, {
       ...options,
@@ -360,7 +370,7 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
       try {
         await api.refreshToken()
 
-        const retryHeaders = buildHeaders()
+        const retryHeaders = buildAuthenticatedHeaders(options)
 
         const retryResponse = await fetch(`${API_BASE_URL}${url}`, {
           ...options,
