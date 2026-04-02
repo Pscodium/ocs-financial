@@ -763,7 +763,7 @@ export default function HomePage() {
                      />
                   </div>
                   <p className="text-[0.8rem] text-muted-foreground">
-                    Ex: Coloque "2" para dividir o valor das contas desta categoria com outra pessoa.
+                    Ex: Coloque &quot;2&quot; para dividir o valor das contas desta categoria com outra pessoa.
                   </p>
                 </div>
               )}
@@ -786,7 +786,7 @@ export default function HomePage() {
                 Isso criará uma cópia de todas as categorias e contas atuais para o mês de{" "}
                 <span className="font-semibold text-foreground">{getMonthLabel(shiftMonth(finance.currentMonthKey, 1))}</span>.
                 <br/><br/>
-                Os valores serão mantidos, mas o status de pagamento será redefinido para "pendente".
+                Os valores serão mantidos, mas o status de pagamento será redefinido para &quot;pendente&quot;.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -806,7 +806,7 @@ export default function HomePage() {
                 para {" "}
                 <span className="font-semibold text-foreground">{getMonthLabel(finance.currentMonthKey)}</span>.
                 <br/><br/>
-                Os valores serão mantidos, mas o status de pagamento será redefinido para "pendente".
+                Os valores serão mantidos, mas o status de pagamento será redefinido para &quot;pendente&quot;.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

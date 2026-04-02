@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Plus, Target, AlertTriangle, CheckCircle2, TrendingUp, MoreHorizontal, Pencil, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import { formatCurrency, getMonthLabel } from "@/lib/types"
+import { createId, formatCurrency, getMonthLabel } from "@/lib/types"
 import type { Budget } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -44,7 +44,7 @@ export default function BudgetsPage() {
 
     const category = categories.find((c) => c.id === selectedCategoryId)
     const budget: Budget = {
-      id: editingBudget?.id || `budget-${Date.now()}`,
+      id: editingBudget?.id || `budget-${createId()}`,
       categoryId: selectedCategoryId || undefined,
       categoryName: category?.name || budgetName.trim(),
       limit: parseFloat(budgetLimit),
