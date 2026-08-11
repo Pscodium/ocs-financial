@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers"
 import type { MonthData } from "@/lib/types"
 import type { User } from "@/lib/api"
 
-const API_BASE_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "https://finapi.pscodium.dev"
+const API_BASE_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "https://api.pscodium.dev/financial"
 
 async function fetchWithForwardedAuth(path: string): Promise<Response> {
   const requestHeaders = await headers()

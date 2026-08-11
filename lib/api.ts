@@ -1,6 +1,6 @@
 import type { MonthData } from "./types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://finapi.pscodium.dev"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.pscodium.dev/financial"
 const API_AUTH_URL = process.env.NEXT_PUBLIC_API_AUTH_URL || "http://localhost:3000"
 const INTERNAL_SESSION_LOGIN_URL = "/api/private/session/login"
 const INTERNAL_SESSION_REGISTER_URL = "/api/private/session/register"
