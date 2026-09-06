@@ -14,6 +14,7 @@ interface SummaryCardsProps {
   income: number
   myShare: number
   sobra: number
+  transactionsTotal?: number
   previousMonthData?: {
     total: number
     paid: number
@@ -53,7 +54,7 @@ function PercentageChange({ current, previous, showPositiveAsGood = true }: Perc
   )
 }
 
-export function SummaryCards({ total, paid, income, myShare, sobra, previousMonthData }: SummaryCardsProps) {
+export function SummaryCards({ total, paid, income, myShare, sobra, transactionsTotal = 0, previousMonthData }: SummaryCardsProps) {
   const isMobile = useIsMobile()
   const [openTooltip, setOpenTooltip] = useState<string | null>(null)
 
@@ -293,10 +294,19 @@ export function SummaryCards({ total, paid, income, myShare, sobra, previousMont
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-xs">
             <p className="font-semibold mb-1">Sobra Mensal</p>
-            <p className="text-xs">Diferença entre seu saldo em conta e sua parte das contas.</p>
-            <p className="text-xs mt-1 font-mono">
-              {formatCurrency(income)} - {formatCurrency(myShare)} = {formatCurrency(sobra)}
+            <p className="text-xs">
+              Diferença entre seu saldo em conta, sua parte das contas
+              {transactionsTotal > 0 && " e as transações avulsas do mês"}.
             </p>
+            <p className="text-xs mt-1 font-mono">
+              {formatCurrency(income)} - {formatCurrency(myShare)}
+              {transactionsTotal > 0 && ` - ${formatCurrency(transactionsTotal)}`} = {formatCurrency(sobra)}
+            </p>
+            {transactionsTotal > 0 && (
+              <p className="text-xs mt-1 text-amber-600 dark:text-amber-400">
+                Inclui {formatCurrency(transactionsTotal)} em transações avulsas.
+              </p>
+            )}
             {previousMonthData && (
               <p className="text-xs mt-1 text-muted-foreground">
                 Mês anterior: {formatCurrency(previousMonthData.sobra)}

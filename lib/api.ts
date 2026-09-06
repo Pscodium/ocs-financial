@@ -882,4 +882,32 @@ export const api = {
       method: "DELETE",
     })
   },
+
+  // Transactions CRUD
+  async getTransactions(monthKey: string): Promise<import("./types").Transaction[]> {
+    const response = await fetchWithAuth(`/months/${monthKey}/transactions`)
+    return response.json()
+  },
+
+  async createTransaction(monthKey: string, transaction: import("./types").Transaction): Promise<import("./types").Transaction> {
+    const response = await fetchWithAuth(`/months/${monthKey}/transactions`, {
+      method: "POST",
+      body: JSON.stringify(transaction),
+    })
+    return response.json()
+  },
+
+  async updateTransaction(monthKey: string, transactionId: string, transaction: import("./types").Transaction): Promise<import("./types").Transaction> {
+    const response = await fetchWithAuth(`/months/${monthKey}/transactions/${transactionId}`, {
+      method: "PUT",
+      body: JSON.stringify(transaction),
+    })
+    return response.json()
+  },
+
+  async deleteTransaction(monthKey: string, transactionId: string): Promise<void> {
+    await fetchWithAuth(`/months/${monthKey}/transactions/${transactionId}`, {
+      method: "DELETE",
+    })
+  },
 }

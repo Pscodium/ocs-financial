@@ -601,10 +601,20 @@ export function useFinance() {
     }, 0)
   }, [currentMonth, getBillCategories, getTotalByCategory])
 
-  /** Sobra = saldo - minha parte (não o montante total) */
+  const getTransactionsTotal = useCallback(() => {
+    if (!currentMonth) return 0
+    return (currentMonth.transactions ?? []).reduce((sum, t) => sum + t.amount, 0)
+  }, [currentMonth])
+
+  const getTransactions = useCallback((): import("@/lib/types").Transaction[] => {
+    if (!currentMonth) return []
+    return [...(currentMonth.transactions ?? [])].sort((a, b) => b.date.localeCompare(a.date))
+  }, [currentMonth])
+
+  /** Sobra = saldo - minha parte - gastos avulsos (não o montante total de contas) */
   const getSobra = useCallback(() => {
-    return getIncomeTotal() - getMyShare()
-  }, [getIncomeTotal, getMyShare])
+    return getIncomeTotal() - getMyShare() - getTransactionsTotal()
+  }, [getIncomeTotal, getMyShare, getTransactionsTotal])
 
   // Budget operations
   const addBudget = useCallback(
@@ -950,6 +960,89 @@ export function useFinance() {
     [allMonths, applyLocalUpdate, currentMonthKey],
   )
 
+  // Transaction operations
+  const addTransaction = useCallback(
+    async (transaction: import("@/lib/types").Transaction) => {
+      const months = ensureMonth(currentMonthKey)
+      const updated = months.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          transactions: [...(m.transactions || []), transaction],
+        }
+      })
+
+      try {
+        await api.createTransaction(currentMonthKey, transaction)
+        applyLocalUpdate(updated)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao criar transação:", error)
+          return
+        }
+        if (error instanceof NetworkError) {
+          return
+        }
+        console.error('Failed to create transaction:', error)
+      }
+    },
+    [applyLocalUpdate, currentMonthKey, ensureMonth],
+  )
+
+  const updateTransaction = useCallback(
+    async (transaction: import("@/lib/types").Transaction) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          transactions: (m.transactions || []).map((t) => (t.id === transaction.id ? transaction : t)),
+        }
+      })
+
+      try {
+        await api.updateTransaction(currentMonthKey, transaction.id, transaction)
+        applyLocalUpdate(updated)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao atualizar transação:", error)
+          return
+        }
+        if (error instanceof NetworkError) {
+          return
+        }
+        console.error('Failed to update transaction:', error)
+      }
+    },
+    [allMonths, applyLocalUpdate, currentMonthKey],
+  )
+
+  const removeTransaction = useCallback(
+    async (transactionId: string) => {
+      const updated = allMonths.map((m) => {
+        if (m.monthKey !== currentMonthKey) return m
+        return {
+          ...m,
+          transactions: (m.transactions || []).filter((t) => t.id !== transactionId),
+        }
+      })
+
+      try {
+        await api.deleteTransaction(currentMonthKey, transactionId)
+        applyLocalUpdate(updated)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 429) {
+          console.error("Rate limit ao remover transação:", error)
+          return
+        }
+        if (error instanceof NetworkError) {
+          return
+        }
+        console.error('Failed to delete transaction:', error)
+      }
+    },
+    [allMonths, applyLocalUpdate, currentMonthKey],
+  )
+
   return {
     loaded: !monthsQuery.isPending,
     allMonths,
@@ -994,5 +1087,10 @@ export function useFinance() {
     addSubscription,
     updateSubscription,
     removeSubscription,
+    getTransactions,
+    getTransactionsTotal,
+    addTransaction,
+    updateTransaction,
+    removeTransaction,
   }
 }

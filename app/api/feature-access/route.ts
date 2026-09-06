@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { resolveTabFeatureAccessFromFeatureMap } from "@/lib/feature-flags"
+import { resolveTabFeatureAccessFromFeatureMap, resolveSectionFlagsFromFeatureMap } from "@/lib/feature-flags"
 import { fetchFeaturesByIdentity } from "@/lib/server/feature-flags"
 
 export async function GET(request: NextRequest) {
@@ -9,9 +9,13 @@ export async function GET(request: NextRequest) {
       cookieHeader: request.headers.get("cookie"),
     })
     const access = resolveTabFeatureAccessFromFeatureMap(featureMap)
+    const flags = resolveSectionFlagsFromFeatureMap(featureMap)
 
-    return NextResponse.json({ access })
+    return NextResponse.json({ access, flags })
   } catch {
-    return NextResponse.json({ access: resolveTabFeatureAccessFromFeatureMap(null) }, { status: 200 })
+    return NextResponse.json(
+      { access: resolveTabFeatureAccessFromFeatureMap(null), flags: resolveSectionFlagsFromFeatureMap(null) },
+      { status: 200 },
+    )
   }
 }

@@ -6,6 +6,7 @@ export type FeatureName =
   | "financial_investments"
   | "financial_goals"
   | "financial_subscriptions"
+  | "financial_transactions"
 
 type TabRoute = "/" | "/budgets" | "/investments" | "/goals" | "/analytics" | "/recurring"
 
@@ -17,6 +18,7 @@ const KNOWN_FEATURES: FeatureName[] = [
   "financial_investments",
   "financial_goals",
   "financial_subscriptions",
+  "financial_transactions",
 ]
 
 const TAB_TO_FEATURE: Record<TabRoute, FeatureName | null> = {
@@ -70,6 +72,19 @@ export function resolveTabFeatureAccessFromFeatureMap(
     "/goals": Boolean(featureMap.financial_goals),
     "/analytics": true,
     "/recurring": Boolean(featureMap.financial_subscriptions),
+  }
+}
+
+export interface SectionFeatureFlags {
+  financial_transactions: boolean
+}
+
+/** Flags que não controlam uma aba inteira, mas uma seção dentro de uma página. */
+export function resolveSectionFlagsFromFeatureMap(
+  featureMap: Partial<Record<FeatureName, boolean>> | null | undefined,
+): SectionFeatureFlags {
+  return {
+    financial_transactions: Boolean(featureMap?.financial_transactions),
   }
 }
 

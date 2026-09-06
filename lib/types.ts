@@ -28,6 +28,18 @@ export interface MonthData {
   investments?: Investment[]
   goals?: FinancialGoal[]
   subscriptions?: Subscription[]
+  transactions?: Transaction[]
+}
+
+/** Gasto pontual/avulso de um dia específico do mês, fora do planejamento de contas. */
+export interface Transaction {
+  id: string
+  description: string
+  amount: number
+  /** Data específica do gasto, dentro do mês (ISO date, YYYY-MM-DD) */
+  date: string
+  /** Texto livre para categorização leve (ex: "lazer", "comida") */
+  tag?: string
 }
 
 export interface Budget {

@@ -4,10 +4,12 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useFinance } from "@/hooks/use-finance"
 import { useAuth } from "@/hooks/use-auth"
+import { usePlanFeatures } from "@/hooks/use-plan-features"
 import { AuthGuard } from "@/components/auth-guard"
 import { AppTabs } from "@/components/app-tabs"
 import { SummaryCards } from "@/components/summary-cards"
 import { CategoryCard } from "@/components/category-card"
+import { TransactionsSection } from "@/components/transactions-section"
 import { MonthSelector } from "@/components/month-selector"
 import { MonthlyChart } from "@/components/monthly-chart"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -58,6 +60,7 @@ function shiftMonth(monthKey: string, delta: number): string {
 
 export default function HomePage() {
   const finance = useFinance()
+  const { flags: featureFlags } = usePlanFeatures()
   const { logout, user } = useAuth()
   const router = useRouter()
   const [showAddCategory, setShowAddCategory] = useState(false)
@@ -240,6 +243,8 @@ export default function HomePage() {
   const income = finance.getIncomeTotal()
   const sobra = finance.getSobra()
   const myShare = finance.getMyShare()
+  const transactionsTotal = finance.getTransactionsTotal()
+  const transactions = finance.getTransactions()
 
   // Get previous month data for comparison
   const previousMonthKey = shiftMonth(finance.currentMonthKey, -1)
@@ -443,12 +448,13 @@ export default function HomePage() {
 
           {/* Summary Cards */}
           <div className="mb-10">
-            <SummaryCards 
-              total={total} 
-              paid={paid} 
-              income={income} 
-              myShare={myShare} 
+            <SummaryCards
+              total={total}
+              paid={paid}
+              income={income}
+              myShare={myShare}
               sobra={sobra}
+              transactionsTotal={transactionsTotal}
               previousMonthData={previousMonthData}
             />
           </div>
@@ -552,6 +558,16 @@ export default function HomePage() {
                      Adicionar Entradas
                    </Button>
                 </div>
+              )}
+
+              {featureFlags.financial_transactions && (
+                <TransactionsSection
+                  monthKey={finance.currentMonthKey}
+                  transactions={transactions}
+                  onAdd={finance.addTransaction}
+                  onUpdate={finance.updateTransaction}
+                  onRemove={finance.removeTransaction}
+                />
               )}
             </div>
 

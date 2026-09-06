@@ -6,25 +6,41 @@ import { useAuth } from "@/hooks/use-auth"
 import {
   getUserPlanIdentifier,
   resolveTabFeatureAccessFromFeatureMap,
+  resolveSectionFlagsFromFeatureMap,
   type TabFeatureAccess,
+  type SectionFeatureFlags,
 } from "@/lib/feature-flags"
 import { queryKeys } from "@/lib/query-keys"
 
 interface UsePlanFeaturesResult {
   featureAccess: TabFeatureAccess
+  flags: SectionFeatureFlags
   isLoading: boolean
 }
 
 interface FeatureAccessResponse {
   access?: TabFeatureAccess
+  flags?: SectionFeatureFlags
+}
+
+interface PlanFeaturesData {
+  access: TabFeatureAccess
+  flags: SectionFeatureFlags
 }
 
 function getPlanKey(planIdentifier: string | null): string {
   return planIdentifier && planIdentifier.trim().length > 0 ? planIdentifier.trim() : "__no_plan__"
 }
 
-async function fetchFeatureAccess(): Promise<TabFeatureAccess> {
-  let nextAccess = resolveTabFeatureAccessFromFeatureMap(null)
+function getRestrictedPlanFeatures(): PlanFeaturesData {
+  return {
+    access: resolveTabFeatureAccessFromFeatureMap(null),
+    flags: resolveSectionFlagsFromFeatureMap(null),
+  }
+}
+
+async function fetchFeatureAccess(): Promise<PlanFeaturesData> {
+  let next = getRestrictedPlanFeatures()
 
   try {
     const response = await fetchWithSessionAuth("/api/feature-access", {
@@ -34,15 +50,16 @@ async function fetchFeatureAccess(): Promise<TabFeatureAccess> {
 
     if (response.ok) {
       const data = (await response.json()) as FeatureAccessResponse
-      if (data.access) {
-        nextAccess = data.access
+      next = {
+        access: data.access ?? next.access,
+        flags: data.flags ?? next.flags,
       }
     }
   } catch {
-    nextAccess = resolveTabFeatureAccessFromFeatureMap(null)
+    next = getRestrictedPlanFeatures()
   }
 
-  return nextAccess
+  return next
 }
 
 export function usePlanFeatures(): UsePlanFeaturesResult {
@@ -55,7 +72,7 @@ export function usePlanFeatures(): UsePlanFeaturesResult {
     enabled: !isAuthInitializing,
     queryFn: async () => {
       if (!isAuthenticated) {
-        return resolveTabFeatureAccessFromFeatureMap(null)
+        return getRestrictedPlanFeatures()
       }
 
       return fetchFeatureAccess()
@@ -64,8 +81,11 @@ export function usePlanFeatures(): UsePlanFeaturesResult {
     refetchOnWindowFocus: true,
   })
 
+  const data = featureAccessQuery.data ?? getRestrictedPlanFeatures()
+
   return {
-    featureAccess: featureAccessQuery.data ?? resolveTabFeatureAccessFromFeatureMap(null),
+    featureAccess: data.access,
+    flags: data.flags,
     isLoading: isAuthInitializing || featureAccessQuery.isPending,
   }
 }
